@@ -52,17 +52,22 @@ export default function DashboardPage() {
   useEffect(() => {
     Promise.all([fetchMetrics(), fetchTxs()]).finally(() => setLoading(false))
 
-    const channel = supabase
-      .channel('dash-realtime')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'transactions' }, () => {
-        fetchMetrics()
-        fetchTxs()
-      })
-      .subscribe((status) => {
-        setLive(status === 'SUBSCRIBED')
-      })
+    let channel: ReturnType<typeof supabase.channel> | null = null
+    try {
+      channel = supabase
+        .channel('dash-realtime')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'transactions' }, () => {
+          fetchMetrics()
+          fetchTxs()
+        })
+        .subscribe((status) => {
+          setLive(status === 'SUBSCRIBED')
+        })
+    } catch {
+      // realtime unavailable — page still works via fetch
+    }
 
-    return () => { supabase.removeChannel(channel) }
+    return () => { if (channel) supabase.removeChannel(channel) }
   }, [fetchMetrics, fetchTxs])
 
   const cards = [
