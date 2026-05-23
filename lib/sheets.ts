@@ -13,7 +13,6 @@ function getAuth() {
 export async function appendToSheet(values: (string | number)[][]) {
   const auth = getAuth()
   const sheets = google.sheets({ version: 'v4', auth })
-
   await sheets.spreadsheets.values.append({
     spreadsheetId: process.env.GOOGLE_SHEET_ID!,
     range: 'Sheet1!A1',
@@ -22,14 +21,37 @@ export async function appendToSheet(values: (string | number)[][]) {
   })
 }
 
+export async function appendToNamedSheet(sheetName: string, values: (string | number)[][][]) {
+  const auth = getAuth()
+  const sheets = google.sheets({ version: 'v4', auth })
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: process.env.GOOGLE_SHEET_ID!,
+    range: `'${sheetName}'!A1`,
+    valueInputOption: 'USER_ENTERED',
+    requestBody: { values },
+  })
+}
+
+export async function clearAndWriteSheet(sheetName: string, values: (string | number | boolean)[][]) {
+  const auth = getAuth()
+  const sheets = google.sheets({ version: 'v4', auth })
+  const spreadsheetId = process.env.GOOGLE_SHEET_ID!
+  const range = `'${sheetName}'!A1:Z10000`
+  await sheets.spreadsheets.values.clear({ spreadsheetId, range })
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range: `'${sheetName}'!A1`,
+    valueInputOption: 'USER_ENTERED',
+    requestBody: { values },
+  })
+}
+
 export async function readSheet(range = 'Sheet1!A1:Z1000') {
   const auth = getAuth()
   const sheets = google.sheets({ version: 'v4', auth })
-
   const response = await sheets.spreadsheets.values.get({
     spreadsheetId: process.env.GOOGLE_SHEET_ID!,
     range,
   })
-
   return response.data.values ?? []
 }
