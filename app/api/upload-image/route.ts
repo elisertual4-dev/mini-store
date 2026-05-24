@@ -12,11 +12,15 @@ export async function POST(req: NextRequest) {
 
     const buffer = await file.arrayBuffer()
     const contentType = file.type || 'image/jpeg'
+    console.log('[upload-image]', { filename, contentType, size: buffer.byteLength, originalName: file.name })
     const { error } = await supabase.storage
       .from('product-images')
       .upload(filename, buffer, { contentType, upsert: false })
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (error) {
+      console.error('[upload-image] storage error:', error)
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
 
     const { data: { publicUrl } } = supabase.storage
       .from('product-images')

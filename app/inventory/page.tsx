@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import QRCode from 'react-qr-code'
 import type { StockLevel, InventoryLog } from '@/lib/inventory'
+import { resizeImage } from '@/lib/resize-image'
 
 type Product = {
   id: string
@@ -43,6 +44,7 @@ export default function InventoryPage() {
   const [savingBarcode, setSavingBarcode] = useState(false)
 
   const [uploadingImageFor, setUploadingImageFor] = useState<string | null>(null)
+  const [uploadError, setUploadError] = useState<string | null>(null)
   const rowFileRef = useRef<HTMLInputElement>(null)
   const rowFileTargetId = useRef<string | null>(null)
 
@@ -51,19 +53,26 @@ export default function InventoryPage() {
     const productId = rowFileTargetId.current
     if (!file || !productId) return
     setUploadingImageFor(productId)
+    setUploadError(null)
     try {
+      const resized = await resizeImage(file)
       const fd = new FormData()
-      fd.append('file', file)
+      fd.append('file', resized)
       const res = await fetch('/api/upload-image', { method: 'POST', body: fd })
       const data = await res.json()
-      if (res.ok) {
-        await fetch('/api/products', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: productId, image_url: data.url }),
-        })
-        await fetchProducts()
+      if (!res.ok) throw new Error(data.error ?? `Upload failed (${res.status})`)
+      const patchRes = await fetch('/api/products', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: productId, image_url: data.url }),
+      })
+      if (!patchRes.ok) {
+        const patchData = await patchRes.json()
+        throw new Error(patchData.error ?? `Save failed (${patchRes.status})`)
       }
+      await fetchProducts()
+    } catch (e: unknown) {
+      setUploadError((e as Error).message ?? 'Upload failed')
     } finally {
       setUploadingImageFor(null)
       if (rowFileRef.current) rowFileRef.current.value = ''
@@ -115,8 +124,9 @@ export default function InventoryPage() {
     try {
       let image_url: string | null = null
       if (addPhotoFile) {
+        const resized = await resizeImage(addPhotoFile)
         const fd = new FormData()
-        fd.append('file', addPhotoFile)
+        fd.append('file', resized)
         const res = await fetch('/api/upload-image', { method: 'POST', body: fd })
         const data = await res.json()
         if (res.ok) image_url = data.url
@@ -253,6 +263,13 @@ export default function InventoryPage() {
         className="hidden"
         onChange={handleRowImageUpload}
       />
+
+      {uploadError && (
+        <div className="mb-3 px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-xl text-sm text-red-400 flex items-center justify-between gap-3">
+          <span>Photo upload failed: {uploadError}</span>
+          <button onClick={() => setUploadError(null)} className="text-red-300 hover:text-white">✕</button>
+        </div>
+      )}
 
       {/* Table */}
       <div className="overflow-x-auto rounded-2xl border border-gray-800 bg-gray-900">

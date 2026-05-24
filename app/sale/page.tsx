@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useRef, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
+import { resizeImage } from '@/lib/resize-image'
 
 type Product = {
   id: string
@@ -42,8 +43,9 @@ function SaleContent() {
     if (!file || !product) return
     setUploadingPhoto(true)
     try {
+      const resized = await resizeImage(file)
       const fd = new FormData()
-      fd.append('file', file)
+      fd.append('file', resized)
       const uploadRes = await fetch('/api/upload-image', { method: 'POST', body: fd })
       const uploadData = await uploadRes.json()
       if (!uploadRes.ok) throw new Error(uploadData.error)
