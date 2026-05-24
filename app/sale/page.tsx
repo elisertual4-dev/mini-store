@@ -29,6 +29,9 @@ function SaleContent() {
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'credit'>('cash')
   const [customerName, setCustomerName] = useState('')
+  const [customers, setCustomers] = useState<string[]>([])
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false)
+  const customerWrapRef = useRef<HTMLDivElement>(null)
 
   const photoInputRef = useRef<HTMLInputElement>(null)
 
@@ -39,6 +42,24 @@ function SaleContent() {
       .then((data: Product) => { setProduct(data); setLoading(false) })
       .catch((e: unknown) => { setError(typeof e === 'string' ? e : 'Failed to load product'); setLoading(false) })
   }, [barcode])
+
+  useEffect(() => {
+    if (paymentMethod !== 'credit') return
+    fetch('/api/customers')
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then((d: { customers: string[] }) => setCustomers(d.customers))
+      .catch(() => { /* non-fatal */ })
+  }, [paymentMethod])
+
+  useEffect(() => {
+    function onClick(e: MouseEvent) {
+      if (customerWrapRef.current && !customerWrapRef.current.contains(e.target as Node)) {
+        setShowCustomerDropdown(false)
+      }
+    }
+    document.addEventListener('mousedown', onClick)
+    return () => document.removeEventListener('mousedown', onClick)
+  }, [])
 
   async function handlePhotoCapture(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -247,14 +268,49 @@ function SaleContent() {
                 </button>
               </div>
               {paymentMethod === 'credit' && (
-                <input
-                  type="text"
-                  value={customerName}
-                  onChange={e => setCustomerName(e.target.value)}
-                  placeholder="Customer name"
-                  className="bg-gray-700 border border-gray-600 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-amber-500"
-                  maxLength={120}
-                />
+                <div ref={customerWrapRef} className="relative">
+                  <input
+                    type="text"
+                    value={customerName}
+                    onChange={e => { setCustomerName(e.target.value); setShowCustomerDropdown(true) }}
+                    onFocus={() => setShowCustomerDropdown(true)}
+                    placeholder={customers.length ? 'Search or type new customer' : 'Customer name'}
+                    className="w-full bg-gray-700 border border-gray-600 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-amber-500"
+                    maxLength={120}
+                    autoComplete="off"
+                  />
+                  {showCustomerDropdown && (() => {
+                    const q = customerName.trim().toLowerCase()
+                    const matches = q
+                      ? customers.filter(c => c.toLowerCase().includes(q))
+                      : customers
+                    const exact = q && customers.some(c => c.toLowerCase() === q)
+                    if (matches.length === 0 && !q) return null
+                    return (
+                      <div className="absolute z-20 left-0 right-0 mt-1 max-h-56 overflow-y-auto bg-gray-800 border border-gray-600 rounded-xl shadow-xl">
+                        {matches.length > 0 ? (
+                          matches.map(c => (
+                            <button
+                              key={c}
+                              type="button"
+                              onClick={() => { setCustomerName(c); setShowCustomerDropdown(false) }}
+                              className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-700 transition-colors ${c.toLowerCase() === q ? 'text-amber-400' : 'text-gray-200'}`}
+                            >
+                              {c}
+                            </button>
+                          ))
+                        ) : (
+                          <div className="px-3 py-2 text-xs text-gray-500">No match — will create new customer</div>
+                        )}
+                        {q && !exact && matches.length > 0 && (
+                          <div className="px-3 py-2 text-xs text-gray-500 border-t border-gray-700">
+                            Enter to create &quot;{customerName.trim()}&quot;
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
+                </div>
               )}
             </div>
 
