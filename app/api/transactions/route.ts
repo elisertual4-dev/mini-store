@@ -7,7 +7,7 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await supabase
     .from('transactions')
-    .select('*, products(name, barcode, price)')
+    .select('*, products(name, barcode, price, image_url)')
     .order('created_at', { ascending: false })
     .limit(limit)
 

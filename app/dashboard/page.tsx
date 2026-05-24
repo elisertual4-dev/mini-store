@@ -42,7 +42,7 @@ type Transaction = {
   created_at: string
   total: number
   qty: number
-  products: { name: string; barcode: string | null; price: number } | null
+  products: { name: string; barcode: string | null; price: number; image_url: string | null } | null
 }
 
 const NAV = [
@@ -187,11 +187,11 @@ export default function DashboardPage() {
 
   // top products
   const topProducts = (() => {
-    const map: Record<string, { name: string; qty: number; revenue: number }> = {}
+    const map: Record<string, { name: string; qty: number; revenue: number; image_url: string | null }> = {}
     txs.forEach(tx => {
       if (!tx.products) return
       const n = tx.products.name
-      if (!map[n]) map[n] = { name: n, qty: 0, revenue: 0 }
+      if (!map[n]) map[n] = { name: n, qty: 0, revenue: 0, image_url: tx.products.image_url ?? null }
       map[n].qty += tx.qty
       map[n].revenue += tx.total
     })
@@ -365,9 +365,21 @@ export default function DashboardPage() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 {topProducts.map((p, i) => (
                   <div key={p.name}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                      <span style={{ fontSize: '13px', fontWeight: 500, color: C.text, maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
-                      <span style={{ fontFamily: "'DM Mono', monospace", fontSize: '12px', color: COLORS[i] }}>{p.qty} u</span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', gap: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                        <div style={{
+                          width: '30px', height: '30px', borderRadius: '7px', flexShrink: 0,
+                          overflow: 'hidden', background: C.border,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}>
+                          {p.image_url
+                            ? <img src={p.image_url} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            : <span style={{ fontSize: '13px', opacity: 0.4 }}>📦</span>
+                          }
+                        </div>
+                        <span style={{ fontSize: '13px', fontWeight: 500, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
+                      </div>
+                      <span style={{ fontFamily: "'DM Mono', monospace", fontSize: '12px', color: COLORS[i], flexShrink: 0 }}>{p.qty} u</span>
                     </div>
                     <div style={{ height: '5px', background: C.border, borderRadius: '3px', overflow: 'hidden' }}>
                       <div style={{
@@ -416,24 +428,38 @@ export default function DashboardPage() {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
               <thead>
                 <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                  {['#', 'Product', 'Qty', 'Total', 'Time'].map((h, i) => (
-                    <th key={h} style={{
-                      padding: '11px 20px', textAlign: i >= 2 ? 'right' : 'left',
+                  {['#', '', 'Product', 'Qty', 'Total', 'Time'].map((h, i) => (
+                    <th key={h + i} style={{
+                      padding: i === 1 ? '11px 4px 11px 20px' : '11px 20px',
+                      textAlign: i >= 3 ? 'right' : 'left',
                       fontSize: '9px', fontWeight: 700, letterSpacing: '2px',
                       color: C.muted, textTransform: 'uppercase',
+                      width: i === 0 ? '40px' : i === 1 ? '44px' : undefined,
                     }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={5} style={{ padding: '48px', textAlign: 'center', color: C.muted }}>Loading…</td></tr>
+                  <tr><td colSpan={6} style={{ padding: '48px', textAlign: 'center', color: C.muted }}>Loading…</td></tr>
                 ) : txs.length === 0 ? (
-                  <tr><td colSpan={5} style={{ padding: '48px', textAlign: 'center', color: C.muted }}>No transactions yet</td></tr>
+                  <tr><td colSpan={6} style={{ padding: '48px', textAlign: 'center', color: C.muted }}>No transactions yet</td></tr>
                 ) : txs.slice(0, 10).map((tx, i) => (
                   <tr key={tx.id} className="tr-row">
                     <td style={{ padding: '13px 20px', color: C.muted, fontFamily: 'monospace', fontSize: '11px', background: 'transparent', transition: 'background 0.1s' }}>
                       {(i + 1).toString().padStart(2, '0')}
+                    </td>
+                    <td style={{ padding: '13px 4px 13px 20px', background: 'transparent', transition: 'background 0.1s' }}>
+                      <div style={{
+                        width: '36px', height: '36px', borderRadius: '8px', overflow: 'hidden',
+                        background: C.border, flexShrink: 0,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        {tx.products?.image_url
+                          ? <img src={tx.products.image_url} alt={tx.products.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          : <span style={{ fontSize: '14px', opacity: 0.35 }}>📦</span>
+                        }
+                      </div>
                     </td>
                     <td style={{ padding: '13px 20px', color: C.text, fontWeight: 500, background: 'transparent', transition: 'background 0.1s' }}>
                       {tx.products?.name ?? '—'}
