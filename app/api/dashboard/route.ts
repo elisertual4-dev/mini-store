@@ -1,14 +1,14 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
+import { phDateKey, phDayStartUTC } from '@/lib/ph-date'
 
 export const dynamic = 'force-dynamic'
 export const fetchCache = 'force-no-store'
 export const revalidate = 0
 
 export async function GET() {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const todayISO = today.toISOString()
+  // "Today" anchored to PH local date
+  const todayISO = phDayStartUTC(phDateKey())
 
   const [{ data: txs, error: txErr }, { data: products, error: prodErr }] = await Promise.all([
     supabase

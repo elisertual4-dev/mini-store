@@ -239,12 +239,14 @@ export default function DashboardPage() {
     return Object.values(map).sort((a, b) => b.date.localeCompare(a.date))
   }, [credits])
 
-  // hourly sales chart
+  // hourly sales chart (PH local hour)
   const chartData = (() => {
+    const hourFmt = new Intl.DateTimeFormat('en-PH', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Manila' })
     const map: Record<string, { time: string; sales: number; orders: number }> = {}
     txs.forEach(tx => {
-      const h = new Date(tx.created_at).getHours()
-      const k = `${h.toString().padStart(2, '0')}:00`
+      const parts = hourFmt.formatToParts(new Date(tx.created_at))
+      const hh = parts.find(p => p.type === 'hour')?.value ?? '00'
+      const k = `${hh}:00`
       if (!map[k]) map[k] = { time: k, sales: 0, orders: 0 }
       map[k].sales += tx.total
       map[k].orders += 1
@@ -382,7 +384,7 @@ export default function DashboardPage() {
             </span>
           </div>
           <p style={{ fontSize: '11px', color: C.textSub, lineHeight: 1.5 }}>
-            {new Date().toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric' })}
+            {new Date().toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'Asia/Manila' })}
           </p>
         </div>
       </aside>
@@ -395,7 +397,7 @@ export default function DashboardPage() {
           <div>
             <h1 style={{ fontSize: '22px', fontWeight: 700, letterSpacing: '-0.3px' }}>Dashboard</h1>
             <p style={{ fontSize: '13px', color: C.textSub, marginTop: '2px' }}>
-              Today's overview — {new Date().toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+              Today's overview — {new Date().toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Asia/Manila' })}
             </p>
           </div>
           <Link href="/scan" style={{
@@ -625,7 +627,7 @@ export default function DashboardPage() {
                         ₱{Number(c.total).toFixed(2)}
                       </td>
                       <td style={{ padding: '13px 20px', textAlign: 'right', color: C.textSub, fontSize: '11px', fontFamily: 'monospace', background: 'transparent', transition: 'background 0.1s' }}>
-                        {new Date(c.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}
+                        {new Date(c.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', timeZone: 'Asia/Manila' })}
                       </td>
                       <td style={{ padding: '13px 20px', textAlign: 'center', background: 'transparent', transition: 'background 0.1s' }}>
                         <button
@@ -651,7 +653,7 @@ export default function DashboardPage() {
                   const expanded = expandedGroup[g.key] ?? false
                   const heading = creditView === 'customer'
                     ? (g as typeof creditsByCustomer[number]).name
-                    : new Date((g as typeof creditsByDay[number]).date + 'T00:00:00').toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
+                    : new Date((g as typeof creditsByDay[number]).date + 'T00:00:00+08:00').toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'Asia/Manila' })
                   return (
                     <div key={g.key} style={{ borderBottom: `1px solid ${C.border}` }}>
                       <button
@@ -718,7 +720,7 @@ export default function DashboardPage() {
                                 </td>
                                 {creditView === 'customer' && (
                                   <td style={{ padding: '9px 24px', textAlign: 'right', color: C.textSub, fontSize: '11px', fontFamily: 'monospace' }}>
-                                    {new Date(c.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}
+                                    {new Date(c.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', timeZone: 'Asia/Manila' })}
                                   </td>
                                 )}
                                 <td style={{ padding: '9px 24px', textAlign: 'center' }}>
@@ -814,7 +816,7 @@ export default function DashboardPage() {
                       ₱{tx.total.toFixed(2)}
                     </td>
                     <td style={{ padding: '13px 20px', textAlign: 'right', color: C.textSub, fontSize: '11px', fontFamily: 'monospace', background: 'transparent', transition: 'background 0.1s' }}>
-                      {new Date(tx.created_at).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })}
+                      {new Date(tx.created_at).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Manila' })}
                     </td>
                   </tr>
                 ))}

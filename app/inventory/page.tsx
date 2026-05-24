@@ -846,7 +846,7 @@ export default function InventoryPage() {
                         </div>
                         {log.note && <p className="text-xs text-gray-400 mt-0.5 truncate">{log.note}</p>}
                         <p className="text-xs text-gray-600 mt-0.5">
-                          {new Date(log.created_at).toLocaleString()}
+                          {new Date(log.created_at).toLocaleString('en-PH', { timeZone: 'Asia/Manila' })}
                         </p>
                       </div>
                     </div>

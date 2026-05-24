@@ -6,6 +6,23 @@ import { getStockLevels } from '@/lib/inventory'
 export const dynamic = 'force-dynamic'
 export const fetchCache = 'force-no-store'
 
+const PH_FMT = new Intl.DateTimeFormat('en-PH', {
+  timeZone: 'Asia/Manila',
+  year: 'numeric', month: '2-digit', day: '2-digit',
+  hour: '2-digit', minute: '2-digit', second: '2-digit',
+  hour12: false,
+})
+
+function toPHString(iso: string | null | undefined): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  // Format: YYYY-MM-DD HH:mm:ss (PH)
+  const parts = PH_FMT.formatToParts(d)
+  const get = (k: string) => parts.find(p => p.type === k)?.value ?? ''
+  return `${get('year')}-${get('month')}-${get('day')} ${get('hour')}:${get('minute')}:${get('second')}`
+}
+
 export async function POST() {
   const { data: transactions, error } = await supabase
     .from('transactions')
@@ -25,7 +42,7 @@ export async function POST() {
       const origCost = Number(t.original_price_at_sale ?? 0) * (t.qty ?? 0)
       const revenue = Number(t.total ?? 0) - origCost
       return [
-        t.created_at,
+        toPHString(t.created_at),
         prod?.name ?? '',
         prod?.category ?? '',
         t.qty ?? 0,
@@ -35,7 +52,7 @@ export async function POST() {
         t.payment_method ?? 'cash',
         t.customer_name ?? '',
         t.paid ? 'YES' : 'NO',
-        t.paid_at ?? '',
+        toPHString(t.paid_at),
       ]
     }),
   ]
@@ -52,7 +69,7 @@ export async function POST() {
       p.stock_qty,
       p.low_stock_threshold,
       p.is_low_stock,
-      new Date().toISOString(),
+      toPHString(new Date().toISOString()),
     ]),
   ]
 
@@ -61,13 +78,13 @@ export async function POST() {
   const creditRows: (string | number)[][] = [
     ['Date', 'Customer', 'Product', 'Qty', 'Total (₱)', 'Status', 'Paid At'],
     ...creditTxs.map(t => [
-      t.created_at,
+      toPHString(t.created_at),
       t.customer_name ?? '',
       (t.products as { name: string } | null)?.name ?? '',
       t.qty ?? 0,
       Number(t.total ?? 0),
       t.paid ? 'PAID' : 'UNPAID',
-      t.paid_at ?? '',
+      toPHString(t.paid_at),
     ]),
   ]
 

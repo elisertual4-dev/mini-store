@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { getStockLevels } from '@/lib/inventory'
+import { phDateKey, phMonthKey, phYearKey, phIsoWeekKey, phDayStartUTC, phDayEndUTC } from '@/lib/ph-date'
 
 export const dynamic = 'force-dynamic'
 export const fetchCache = 'force-no-store'
@@ -8,40 +9,29 @@ export const revalidate = 0
 
 type Period = 'day' | 'week' | 'month' | 'year'
 
-// ISO 8601 week (year + week number). Week starts Monday.
-function isoWeekKey(iso: string): string {
-  const d = new Date(iso)
-  // UTC date stripped of time
-  const target = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()))
-  const dayNum = target.getUTCDay() || 7
-  target.setUTCDate(target.getUTCDate() + 4 - dayNum)
-  const yearStart = new Date(Date.UTC(target.getUTCFullYear(), 0, 1))
-  const weekNo = Math.ceil((((target.getTime() - yearStart.getTime()) / 86400000) + 1) / 7)
-  return `${target.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`
-}
-
 function bucketKey(iso: string, p: Period) {
-  if (p === 'year') return iso.slice(0, 4)
-  if (p === 'month') return iso.slice(0, 7)
-  if (p === 'week') return isoWeekKey(iso)
-  return iso.split('T')[0]
+  if (p === 'year') return phYearKey(iso)
+  if (p === 'month') return phMonthKey(iso)
+  if (p === 'week') return phIsoWeekKey(iso)
+  return phDateKey(iso)
 }
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
-  const from = searchParams.get('from') ?? new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0]
-  const to = searchParams.get('to') ?? new Date().toISOString().split('T')[0]
+  const from = searchParams.get('from') ?? phDateKey(Date.now() - 7 * 86400000)
+  const to = searchParams.get('to') ?? phDateKey()
   const periodParam = (searchParams.get('period') ?? 'day') as Period
   const period: Period = ['day', 'week', 'month', 'year'].includes(periodParam) ? periodParam : 'day'
 
-  const fromDate = new Date(from + 'T00:00:00')
-  const toDate = new Date(to + 'T23:59:59')
+  // Range is PH-local; convert to UTC bounds for the timestamptz column
+  const fromIso = phDayStartUTC(from)
+  const toIso = phDayEndUTC(to)
 
   const { data: txs, error } = await supabase
     .from('transactions')
     .select('*, original_price_at_sale, payment_method, customer_name, paid, paid_at, products(name, category, image_url)')
-    .gte('created_at', fromDate.toISOString())
-    .lte('created_at', toDate.toISOString())
+    .gte('created_at', fromIso)
+    .lte('created_at', toIso)
     .order('created_at')
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -110,7 +100,7 @@ export async function GET(req: NextRequest) {
       cc.count += 1
       if (isPaid) { cc.paid += amt; cc.paid_count += 1 } else { cc.unpaid += amt; cc.unpaid_count += 1 }
 
-      const dayKey = t.created_at.slice(0, 10)
+      const dayKey = phDateKey(t.created_at)
       if (!creditDayMap[dayKey]) creditDayMap[dayKey] = { date: dayKey, total: 0, paid: 0, unpaid: 0, count: 0 }
       const dd = creditDayMap[dayKey]
       dd.total += amt

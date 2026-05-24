@@ -50,7 +50,8 @@ function fmt(n: number) {
 }
 
 function fmtDate(d: string) {
-  return new Date(d + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })
+  // d is a PH-local YYYY-MM-DD; anchor to PH midnight to avoid UTC drift
+  return new Date(d + 'T00:00:00+08:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', timeZone: 'Asia/Manila' })
 }
 
 function fmtPeriod(d: string, p: Period) {
@@ -58,7 +59,7 @@ function fmtPeriod(d: string, p: Period) {
   if (p === 'month') {
     const [y, m] = d.split('-')
     const date = new Date(Number(y), Number(m) - 1, 1)
-    return date.toLocaleDateString('en-PH', { month: 'short', year: 'numeric' })
+    return date.toLocaleDateString('en-PH', { month: 'short', year: 'numeric', timeZone: 'Asia/Manila' })
   }
   if (p === 'week') {
     // Format YYYY-Www -> "W21 '26"
@@ -71,9 +72,17 @@ function fmtPeriod(d: string, p: Period) {
 
 const BAR_COLORS = ['#f59e0b', '#fb923c', '#f87171', '#a78bfa', '#60a5fa', '#34d399', '#a3e635', '#fbbf24', '#c084fc', '#38bdf8']
 
+// PH-local YYYY-MM-DD (Asia/Manila is UTC+8, no DST)
+function phToday(): string {
+  return new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10)
+}
+function phDaysAgo(n: number): string {
+  return new Date(Date.now() - n * 86400000 + 8 * 3600 * 1000).toISOString().slice(0, 10)
+}
+
 export default function ReportsPage() {
-  const today = new Date().toISOString().split('T')[0]
-  const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0]
+  const today = phToday()
+  const weekAgo = phDaysAgo(7)
 
   const [from, setFrom] = useState(weekAgo)
   const [to, setTo] = useState(today)
