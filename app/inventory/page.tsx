@@ -207,7 +207,65 @@ export default function InventoryPage() {
     setPrintProduct(p)
   }
 
-  function handlePrint() {
+  async function handleDownloadAndPrint() {
+    if (!printProduct || !printBarcode) return
+    const area = document.getElementById('barcode-print-area')
+    const svg = area?.querySelector('svg')
+    if (!svg) {
+      window.print()
+      return
+    }
+
+    const svgClone = svg.cloneNode(true) as SVGSVGElement
+    svgClone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+    const svgStr = new XMLSerializer().serializeToString(svgClone)
+    const svgUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgStr)
+
+    const qrImg = new Image()
+    await new Promise<void>((resolve, reject) => {
+      qrImg.onload = () => resolve()
+      qrImg.onerror = () => reject(new Error('QR render failed'))
+      qrImg.src = svgUrl
+    })
+
+    const qrSize = 400
+    const padding = 32
+    const labelH = 40
+    const codeH = 24
+    const priceH = 32
+    const canvas = document.createElement('canvas')
+    canvas.width = qrSize + padding * 2
+    canvas.height = labelH + qrSize + codeH + priceH + padding * 2
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    ctx.fillStyle = '#000000'
+    ctx.textAlign = 'center'
+    ctx.font = 'bold 24px sans-serif'
+    ctx.fillText(printProduct.name, canvas.width / 2, padding + 24)
+    ctx.drawImage(qrImg, padding, padding + labelH, qrSize, qrSize)
+    ctx.font = '18px monospace'
+    ctx.fillStyle = '#666666'
+    ctx.fillText(printBarcode, canvas.width / 2, padding + labelH + qrSize + 22)
+    ctx.font = '20px sans-serif'
+    ctx.fillStyle = '#333333'
+    ctx.fillText('₱' + printProduct.price.toFixed(2), canvas.width / 2, padding + labelH + qrSize + codeH + 22)
+
+    const blob = await new Promise<Blob | null>(r => canvas.toBlob(r, 'image/png'))
+    if (blob) {
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      const safeName = printProduct.name.trim().replace(/[^a-zA-Z0-9-_]+/g, '_')
+      a.href = url
+      a.download = `qr-${safeName}-${printBarcode}.png`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    }
+
     window.print()
   }
 
@@ -402,7 +460,7 @@ export default function InventoryPage() {
                       onClick={() => openPrint(p)}
                       className="px-2.5 py-1 text-xs bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 text-purple-400 rounded-lg font-medium transition-colors"
                     >
-                      Print
+                      Download QR
                     </button>
                     <button
                       onClick={() => setDeleteProduct(p)}
@@ -664,7 +722,7 @@ export default function InventoryPage() {
 
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
             <div className="bg-gray-900 border border-gray-800 rounded-2xl shadow-2xl w-full max-w-xs p-6 flex flex-col items-center gap-4">
-              <h2 className="text-base font-bold self-start">Print Barcode</h2>
+              <h2 className="text-base font-bold self-start">Download QR Code</h2>
               {savingBarcode ? (
                 <div className="flex flex-col items-center gap-2 py-6">
                   <div className="w-6 h-6 border-2 border-gray-700 border-t-purple-500 rounded-full animate-spin" />
@@ -688,11 +746,11 @@ export default function InventoryPage() {
                   Close
                 </button>
                 <button
-                  onClick={handlePrint}
+                  onClick={handleDownloadAndPrint}
                   disabled={savingBarcode}
                   className="flex-1 px-4 py-2.5 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-sm font-bold disabled:opacity-40 transition-colors"
                 >
-                  Print
+                  Download &amp; Print
                 </button>
               </div>
             </div>
