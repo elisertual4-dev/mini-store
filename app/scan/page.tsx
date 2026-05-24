@@ -58,35 +58,29 @@ export default function ScanPage() {
 
   return (
     <main className="min-h-screen bg-gray-950 text-white flex flex-col items-center p-4 gap-4">
-      <div className="w-full max-w-xs flex items-center justify-between mt-2">
+      <h1 className="text-xl font-bold mt-2">Barcode Scanner</h1>
+
+      <div className="flex rounded-full overflow-hidden border border-gray-700 w-full max-w-xs">
         <Link
           href="/dashboard"
           onClick={() => controlsRef.current?.stop()}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-700 text-xs font-semibold text-gray-300 transition-colors"
+          className="flex-1 py-2 text-sm font-semibold text-center text-gray-300 bg-gray-800 hover:bg-gray-700 transition-colors border-r border-gray-700"
         >
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-          </svg>
           Dashboard
         </Link>
-        <h1 className="text-xl font-bold">Barcode Scanner</h1>
-        <span className="w-[88px]" />
-      </div>
-
-      <div className="flex rounded-full overflow-hidden border border-gray-700 w-full max-w-xs">
         <button
           onClick={() => { setMode('sale'); setError(null) }}
           disabled={!idle}
-          className={`flex-1 py-2 text-sm font-semibold transition-colors ${mode === 'sale' ? 'bg-blue-600' : 'bg-gray-800 text-gray-400'} disabled:opacity-60`}
+          className={`flex-1 py-2 text-sm font-semibold transition-colors border-r border-gray-700 ${mode === 'sale' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400'} disabled:opacity-60`}
         >
-          Sale Mode
+          Sale
         </button>
         <button
           onClick={() => { setMode('restock'); setError(null) }}
           disabled={!idle}
-          className={`flex-1 py-2 text-sm font-semibold transition-colors ${mode === 'restock' ? 'bg-green-600' : 'bg-gray-800 text-gray-400'} disabled:opacity-60`}
+          className={`flex-1 py-2 text-sm font-semibold transition-colors ${mode === 'restock' ? 'bg-green-600 text-white' : 'bg-gray-800 text-gray-400'} disabled:opacity-60`}
         >
-          Restock Mode
+          Restock
         </button>
       </div>
 
