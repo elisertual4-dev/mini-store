@@ -2,7 +2,32 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import {
+  AreaChart, Area, BarChart, Bar,
+  XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
+} from 'recharts'
+
+const C = {
+  bg: '#080b12',
+  sidebar: '#0b0f18',
+  card: '#0f1420',
+  cardHover: '#141b28',
+  border: '#1c2438',
+  borderLight: '#243050',
+  teal: '#00d4aa',
+  tealGlow: 'rgba(0,212,170,0.15)',
+  amber: '#f59e0b',
+  amberGlow: 'rgba(245,158,11,0.15)',
+  coral: '#ff6472',
+  coralGlow: 'rgba(255,100,114,0.15)',
+  violet: '#818cf8',
+  violetGlow: 'rgba(129,140,248,0.15)',
+  text: '#dde3f0',
+  textSub: '#7b8aaa',
+  muted: '#3d4a62',
+}
 
 type Metrics = {
   today_sales: number
@@ -20,17 +45,101 @@ type Transaction = {
   products: { name: string; barcode: string | null; price: number } | null
 }
 
-const S = {
-  bg: '#0c0a09',
-  surface: '#1c1917',
-  border: '#292524',
-  amber: '#f59e0b',
-  amberDim: '#78350f',
-  green: '#4ade80',
-  red: '#f87171',
-  muted: '#78716c',
-  text: '#fafaf9',
-  textSub: '#a8a29e',
+const NAV = [
+  { href: '/dashboard', label: 'Dashboard', icon: '▣' },
+  { href: '/inventory', label: 'Inventory', icon: '⊞' },
+  { href: '/reports', label: 'Reports', icon: '◈' },
+  { href: '/scan', label: 'Scanner', icon: '◉' },
+]
+
+function NavItem({ href, label, icon }: { href: string; label: string; icon: string }) {
+  const path = usePathname()
+  const active = path === href
+  return (
+    <Link href={href} style={{
+      display: 'flex', alignItems: 'center', gap: '12px',
+      padding: '11px 14px', borderRadius: '10px', textDecoration: 'none',
+      fontSize: '14px', fontWeight: 500, letterSpacing: '0.2px',
+      marginBottom: '4px',
+      background: active ? C.tealGlow : 'transparent',
+      color: active ? C.teal : C.textSub,
+      borderLeft: active ? `2px solid ${C.teal}` : '2px solid transparent',
+      transition: 'all 0.15s ease',
+    }}>
+      <span style={{ fontSize: '15px', opacity: active ? 1 : 0.6 }}>{icon}</span>
+      {label}
+    </Link>
+  )
+}
+
+function StatCard({ label, value, sub, accent, glow, loading, badge }: {
+  label: string; value: string; sub?: string; accent: string; glow: string;
+  loading: boolean; badge?: boolean
+}) {
+  return (
+    <div style={{
+      background: C.card, border: `1px solid ${C.border}`, borderRadius: '14px',
+      padding: '20px 22px', position: 'relative', overflow: 'hidden',
+      boxShadow: `0 0 0 0 ${glow}`,
+      transition: 'border-color 0.2s, box-shadow 0.2s',
+    }}
+      onMouseEnter={e => {
+        const el = e.currentTarget as HTMLElement
+        el.style.borderColor = accent + '60'
+        el.style.boxShadow = `0 0 24px 0 ${glow}`
+      }}
+      onMouseLeave={e => {
+        const el = e.currentTarget as HTMLElement
+        el.style.borderColor = C.border
+        el.style.boxShadow = `0 0 0 0 ${glow}`
+      }}
+    >
+      <div style={{
+        position: 'absolute', top: 0, right: 0, width: '120px', height: '120px',
+        background: `radial-gradient(circle at top right, ${glow} 0%, transparent 65%)`,
+        pointerEvents: 'none',
+      }} />
+      <p style={{
+        fontSize: '10px', fontWeight: 700, letterSpacing: '2px',
+        color: C.muted, marginBottom: '14px', textTransform: 'uppercase',
+      }}>{label}</p>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <span style={{
+          fontFamily: "'DM Mono', 'Courier New', monospace",
+          fontSize: '30px', fontWeight: 600, lineHeight: 1,
+          color: loading ? C.muted : accent,
+          letterSpacing: '-1px',
+        }}>
+          {loading ? '———' : value}
+        </span>
+        {badge && !loading && (
+          <span style={{
+            width: '7px', height: '7px', borderRadius: '50%',
+            background: C.coral, flexShrink: 0,
+            animation: 'coralPing 1.5s ease-in-out infinite',
+          }} />
+        )}
+      </div>
+      {sub && !loading && (
+        <p style={{ fontSize: '12px', color: C.textSub, marginTop: '6px' }}>{sub}</p>
+      )}
+    </div>
+  )
+}
+
+const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: { value: number }[]; label?: string }) => {
+  if (!active || !payload?.length) return null
+  return (
+    <div style={{
+      background: C.card, border: `1px solid ${C.borderLight}`,
+      borderRadius: '8px', padding: '10px 14px', fontSize: '12px', color: C.text,
+    }}>
+      <p style={{ color: C.textSub, marginBottom: '4px' }}>{label}</p>
+      <p style={{ color: C.teal, fontFamily: 'monospace', fontWeight: 600 }}>
+        ₱{(payload[0]?.value ?? 0).toFixed(2)}
+      </p>
+    </div>
+  )
 }
 
 export default function DashboardPage() {
@@ -45,209 +154,301 @@ export default function DashboardPage() {
   }, [])
 
   const fetchTxs = useCallback(async () => {
-    const r = await fetch('/api/transactions?limit=20')
+    const r = await fetch('/api/transactions?limit=50')
     if (r.ok) setTxs(await r.json())
   }, [])
 
   useEffect(() => {
     Promise.all([fetchMetrics(), fetchTxs()]).finally(() => setLoading(false))
-
     let channel: ReturnType<typeof supabase.channel> | null = null
     try {
       channel = supabase
-        .channel('dash-realtime')
+        .channel('dash-rt')
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'transactions' }, () => {
-          fetchMetrics()
-          fetchTxs()
+          fetchMetrics(); fetchTxs()
         })
-        .subscribe((status) => {
-          setLive(status === 'SUBSCRIBED')
-        })
-    } catch {
-      // realtime unavailable — page still works via fetch
-    }
-
+        .subscribe(s => setLive(s === 'SUBSCRIBED'))
+    } catch { /* realtime unavailable */ }
     return () => { if (channel) supabase.removeChannel(channel) }
   }, [fetchMetrics, fetchTxs])
 
-  const cards = [
-    {
-      label: "TODAY'S SALES",
-      value: metrics ? `₱${metrics.today_sales.toLocaleString('en-PH', { minimumFractionDigits: 2 })}` : '—',
-      accent: S.amber,
-      size: 'lg',
-    },
-    {
-      label: 'TRANSACTIONS',
-      value: metrics ? String(metrics.today_tx_count) : '—',
-      accent: S.green,
-      size: 'md',
-    },
-    {
-      label: 'ITEMS SOLD',
-      value: metrics ? String(metrics.total_items_sold) : '—',
-      accent: S.textSub,
-      size: 'md',
-    },
-    {
-      label: 'TOP PRODUCT',
-      value: metrics?.top_product?.name ?? '—',
-      sub: metrics?.top_product ? `${metrics.top_product.qty} units` : '',
-      accent: S.textSub,
-      size: 'sm',
-    },
-    {
-      label: 'LOW STOCK',
-      value: metrics ? String(metrics.low_stock_count) : '—',
-      accent: (metrics?.low_stock_count ?? 0) > 0 ? S.red : S.green,
-      badge: (metrics?.low_stock_count ?? 0) > 0,
-      size: 'md',
-    },
-  ]
+  // hourly sales chart
+  const chartData = (() => {
+    const map: Record<string, { time: string; sales: number; orders: number }> = {}
+    txs.forEach(tx => {
+      const h = new Date(tx.created_at).getHours()
+      const k = `${h.toString().padStart(2, '0')}:00`
+      if (!map[k]) map[k] = { time: k, sales: 0, orders: 0 }
+      map[k].sales += tx.total
+      map[k].orders += 1
+    })
+    return Object.values(map).sort((a, b) => a.time.localeCompare(b.time))
+  })()
+
+  // top products
+  const topProducts = (() => {
+    const map: Record<string, { name: string; qty: number; revenue: number }> = {}
+    txs.forEach(tx => {
+      if (!tx.products) return
+      const n = tx.products.name
+      if (!map[n]) map[n] = { name: n, qty: 0, revenue: 0 }
+      map[n].qty += tx.qty
+      map[n].revenue += tx.total
+    })
+    return Object.values(map).sort((a, b) => b.qty - a.qty).slice(0, 5)
+  })()
+  const maxQty = topProducts[0]?.qty || 1
+
+  const COLORS = [C.teal, C.amber, C.violet, C.coral, C.textSub]
 
   return (
-    <main style={{ background: S.bg, minHeight: '100vh', fontFamily: "'Syne', sans-serif", color: S.text }}>
-      {/* Grid texture overlay */}
-      <div style={{
-        position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0,
-        backgroundImage: `linear-gradient(${S.border} 1px, transparent 1px), linear-gradient(90deg, ${S.border} 1px, transparent 1px)`,
-        backgroundSize: '40px 40px', opacity: 0.25,
-      }} />
+    <div style={{ display: 'flex', height: '100vh', background: C.bg, fontFamily: "'Outfit', 'Segoe UI', sans-serif", color: C.text, overflow: 'hidden' }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap');
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: ${C.border}; border-radius: 4px; }
+        @keyframes coralPing { 0%,100% { box-shadow: 0 0 0 0 rgba(255,100,114,0.6); } 50% { box-shadow: 0 0 0 6px rgba(255,100,114,0); } }
+        @keyframes tealPing { 0%,100% { box-shadow: 0 0 0 0 rgba(0,212,170,0.6); } 50% { box-shadow: 0 0 0 6px rgba(0,212,170,0); } }
+        @keyframes fadeSlideUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+        .anim { animation: fadeSlideUp 0.4s ease forwards; }
+        .anim1 { animation-delay: 0.05s; opacity: 0; }
+        .anim2 { animation-delay: 0.1s; opacity: 0; }
+        .anim3 { animation-delay: 0.15s; opacity: 0; }
+        .anim4 { animation-delay: 0.2s; opacity: 0; }
+        .anim5 { animation-delay: 0.25s; opacity: 0; }
+        .anim6 { animation-delay: 0.3s; opacity: 0; }
+        .tr-row:hover td { background: ${C.cardHover} !important; }
+      `}</style>
 
-      <div style={{ position: 'relative', zIndex: 1, maxWidth: '1200px', margin: '0 auto', padding: '32px 24px' }}>
+      {/* ── Sidebar ── */}
+      <aside style={{
+        width: '220px', flexShrink: 0, background: C.sidebar,
+        borderRight: `1px solid ${C.border}`,
+        display: 'flex', flexDirection: 'column', padding: '28px 16px 24px',
+      }}>
+        {/* Brand */}
+        <div style={{ padding: '0 6px', marginBottom: '36px' }}>
+          <div style={{
+            fontFamily: "'DM Mono', monospace", fontSize: '13px', fontWeight: 500,
+            letterSpacing: '4px', color: C.teal, marginBottom: '2px',
+          }}>MINI STORE</div>
+          <div style={{ fontSize: '10px', color: C.muted, letterSpacing: '1px' }}>POS SYSTEM</div>
+        </div>
+
+        {/* Nav */}
+        <nav style={{ flex: 1 }}>
+          <p style={{ fontSize: '9px', fontWeight: 700, letterSpacing: '2px', color: C.muted, padding: '0 14px', marginBottom: '10px' }}>MENU</p>
+          {NAV.map(n => <NavItem key={n.href} {...n} />)}
+        </nav>
+
+        {/* Live indicator + date */}
+        <div style={{ padding: '16px', background: C.card, borderRadius: '12px', border: `1px solid ${C.border}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+            <span style={{
+              width: '7px', height: '7px', borderRadius: '50%',
+              background: live ? C.teal : C.muted,
+              animation: live ? 'tealPing 2s ease-in-out infinite' : 'none',
+              flexShrink: 0,
+            }} />
+            <span style={{ fontSize: '11px', color: live ? C.teal : C.muted, fontWeight: 600, letterSpacing: '1px' }}>
+              {live ? 'LIVE' : 'OFFLINE'}
+            </span>
+          </div>
+          <p style={{ fontSize: '11px', color: C.textSub, lineHeight: 1.5 }}>
+            {new Date().toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric' })}
+          </p>
+        </div>
+      </aside>
+
+      {/* ── Main ── */}
+      <main style={{ flex: 1, overflow: 'auto', padding: '32px 28px' }}>
 
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '40px' }}>
+        <div className="anim anim1" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '28px' }}>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
-              <span style={{ fontFamily: "'Bebas Neue', cursive", fontSize: '32px', letterSpacing: '3px', color: S.amber }}>
-                MINI STORE
-              </span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{
-                  width: '8px', height: '8px', borderRadius: '50%', display: 'inline-block',
-                  background: live ? S.green : S.muted,
-                  boxShadow: live ? `0 0 0 0 ${S.green}` : 'none',
-                  animation: live ? 'pulse 2s infinite' : 'none',
-                }} />
-                <style>{`
-                  @keyframes pulse {
-                    0% { box-shadow: 0 0 0 0 rgba(74,222,128,0.4); }
-                    70% { box-shadow: 0 0 0 6px rgba(74,222,128,0); }
-                    100% { box-shadow: 0 0 0 0 rgba(74,222,128,0); }
-                  }
-                  @keyframes redpulse {
-                    0% { box-shadow: 0 0 0 0 rgba(248,113,113,0.5); }
-                    70% { box-shadow: 0 0 0 8px rgba(248,113,113,0); }
-                    100% { box-shadow: 0 0 0 0 rgba(248,113,113,0); }
-                  }
-                `}</style>
-                <span style={{ fontSize: '11px', color: live ? S.green : S.muted, fontWeight: 600, letterSpacing: '1px' }}>
-                  {live ? 'LIVE' : 'CONNECTING'}
-                </span>
-              </div>
-            </div>
-            <p style={{ color: S.muted, fontSize: '13px', letterSpacing: '1px' }}>
-              {new Date().toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+            <h1 style={{ fontSize: '22px', fontWeight: 700, letterSpacing: '-0.3px' }}>Dashboard</h1>
+            <p style={{ fontSize: '13px', color: C.textSub, marginTop: '2px' }}>
+              Today's overview — {new Date().toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
             </p>
           </div>
-          <nav style={{ display: 'flex', gap: '8px' }}>
-            {[
-              { href: '/inventory', label: 'Inventory' },
-              { href: '/reports', label: 'Reports' },
-              { href: '/scan', label: 'Scan' },
-            ].map(({ href, label }) => (
-              <Link key={href} href={href} style={{
-                padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 600,
-                border: `1px solid ${S.border}`, color: S.textSub, textDecoration: 'none',
-                background: S.surface, letterSpacing: '0.5px',
-                transition: 'border-color 0.2s, color 0.2s',
-              }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = S.amber; (e.currentTarget as HTMLElement).style.color = S.amber }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = S.border; (e.currentTarget as HTMLElement).style.color = S.textSub }}
-              >{label}</Link>
-            ))}
-          </nav>
+          <Link href="/scan" style={{
+            display: 'flex', alignItems: 'center', gap: '8px',
+            background: C.teal, color: '#000', padding: '10px 18px',
+            borderRadius: '10px', textDecoration: 'none', fontSize: '13px', fontWeight: 700,
+            letterSpacing: '0.3px', transition: 'opacity 0.15s',
+          }}
+            onMouseEnter={e => (e.currentTarget as HTMLElement).style.opacity = '0.85'}
+            onMouseLeave={e => (e.currentTarget as HTMLElement).style.opacity = '1'}
+          >
+            ◉ Start Scanning
+          </Link>
         </div>
 
-        {/* Metric Cards */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '16px', marginBottom: '40px' }}>
-          {cards.map((card, i) => (
-            <div key={i} style={{
-              background: S.surface, border: `1px solid ${S.border}`, borderRadius: '16px',
-              padding: '20px', position: 'relative', overflow: 'hidden',
-              borderTop: `2px solid ${card.accent}`,
-            }}>
-              <div style={{ position: 'absolute', top: 0, right: 0, width: '80px', height: '80px',
-                background: `radial-gradient(circle at top right, ${card.accent}15 0%, transparent 70%)` }} />
-              <p style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '2px', color: S.muted, marginBottom: '10px' }}>
-                {card.label}
-              </p>
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px' }}>
-                <span style={{
-                  fontFamily: "'Bebas Neue', cursive",
-                  fontSize: card.size === 'lg' ? '36px' : card.size === 'md' ? '42px' : '28px',
-                  lineHeight: 1, color: loading ? S.muted : card.accent,
-                  maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                }}>
-                  {loading ? '—' : card.value}
-                </span>
-                {card.badge && !loading && (metrics?.low_stock_count ?? 0) > 0 && (
-                  <span style={{
-                    width: '8px', height: '8px', borderRadius: '50%', background: S.red,
-                    animation: 'redpulse 1.5s infinite', flexShrink: 0, marginBottom: '8px',
-                  }} />
-                )}
+        {/* Metric cards */}
+        <div className="anim anim2" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px', marginBottom: '22px' }}>
+          <StatCard
+            label="Today's Sales" loading={loading}
+            value={metrics ? `₱${metrics.today_sales.toLocaleString('en-PH', { minimumFractionDigits: 2 })}` : '—'}
+            accent={C.amber} glow={C.amberGlow}
+          />
+          <StatCard
+            label="Transactions" loading={loading}
+            value={metrics ? String(metrics.today_tx_count) : '—'}
+            sub="orders today"
+            accent={C.teal} glow={C.tealGlow}
+          />
+          <StatCard
+            label="Items Sold" loading={loading}
+            value={metrics ? String(metrics.total_items_sold) : '—'}
+            sub="units out"
+            accent={C.violet} glow={C.violetGlow}
+          />
+          <StatCard
+            label="Low Stock" loading={loading}
+            value={metrics ? String(metrics.low_stock_count) : '—'}
+            sub={metrics?.low_stock_count ? 'needs restock' : 'all stocked'}
+            accent={(metrics?.low_stock_count ?? 0) > 0 ? C.coral : C.teal}
+            glow={(metrics?.low_stock_count ?? 0) > 0 ? C.coralGlow : C.tealGlow}
+            badge={(metrics?.low_stock_count ?? 0) > 0}
+          />
+        </div>
+
+        {/* Charts + Top Products row */}
+        <div className="anim anim3" style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: '14px', marginBottom: '22px' }}>
+
+          {/* Sales chart */}
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: '14px', padding: '22px 24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+              <div>
+                <h3 style={{ fontSize: '14px', fontWeight: 700 }}>Sales Today</h3>
+                <p style={{ fontSize: '11px', color: C.textSub, marginTop: '2px' }}>Hourly revenue</p>
               </div>
-              {card.sub && !loading && (
-                <p style={{ fontSize: '11px', color: S.muted, marginTop: '4px' }}>{card.sub}</p>
+              {metrics && (
+                <span style={{
+                  fontFamily: "'DM Mono', monospace", fontSize: '18px', fontWeight: 500, color: C.amber,
+                }}>
+                  ₱{metrics.today_sales.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                </span>
               )}
             </div>
-          ))}
+            {chartData.length === 0 ? (
+              <div style={{ height: '180px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.muted, fontSize: '13px' }}>
+                No sales yet today
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={180}>
+                <AreaChart data={chartData} margin={{ top: 5, right: 0, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="tealGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={C.teal} stopOpacity={0.3} />
+                      <stop offset="95%" stopColor={C.teal} stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid stroke={C.border} strokeDasharray="4 4" vertical={false} />
+                  <XAxis dataKey="time" tick={{ fill: C.muted, fontSize: 10 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fill: C.muted, fontSize: 10 }} axisLine={false} tickLine={false} />
+                  <Tooltip content={<CustomTooltip />} cursor={{ stroke: C.borderLight }} />
+                  <Area type="monotone" dataKey="sales" stroke={C.teal} strokeWidth={2} fill="url(#tealGrad)" dot={false} activeDot={{ r: 4, fill: C.teal, stroke: C.bg, strokeWidth: 2 }} />
+                </AreaChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+
+          {/* Top Products */}
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: '14px', padding: '22px 20px' }}>
+            <h3 style={{ fontSize: '14px', fontWeight: 700, marginBottom: '4px' }}>Top Products</h3>
+            <p style={{ fontSize: '11px', color: C.textSub, marginBottom: '20px' }}>By units sold today</p>
+            {topProducts.length === 0 ? (
+              <div style={{ color: C.muted, fontSize: '13px', textAlign: 'center', paddingTop: '40px' }}>No data yet</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {topProducts.map((p, i) => (
+                  <div key={p.name}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                      <span style={{ fontSize: '13px', fontWeight: 500, color: C.text, maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
+                      <span style={{ fontFamily: "'DM Mono', monospace", fontSize: '12px', color: COLORS[i] }}>{p.qty} u</span>
+                    </div>
+                    <div style={{ height: '5px', background: C.border, borderRadius: '3px', overflow: 'hidden' }}>
+                      <div style={{
+                        height: '100%', borderRadius: '3px',
+                        width: `${(p.qty / maxQty) * 100}%`,
+                        background: `linear-gradient(90deg, ${COLORS[i]}, ${COLORS[i]}99)`,
+                        transition: 'width 0.8s cubic-bezier(0.16, 1, 0.3, 1)',
+                      }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {metrics?.top_product && topProducts.length === 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 500 }}>{metrics.top_product.name}</span>
+                    <span style={{ fontFamily: 'monospace', fontSize: '12px', color: C.teal }}>{metrics.top_product.qty} u</span>
+                  </div>
+                  <div style={{ height: '5px', background: C.border, borderRadius: '3px' }}>
+                    <div style={{ height: '100%', width: '80%', background: C.teal, borderRadius: '3px' }} />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Transactions Table */}
-        <div style={{ background: S.surface, border: `1px solid ${S.border}`, borderRadius: '16px', overflow: 'hidden' }}>
-          <div style={{ padding: '20px 24px', borderBottom: `1px solid ${S.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontFamily: "'Bebas Neue', cursive", fontSize: '20px', letterSpacing: '2px', color: S.text }}>
-              RECENT TRANSACTIONS
-            </span>
-            <Link href="/reports" style={{ fontSize: '12px', color: S.amber, textDecoration: 'none', fontWeight: 600, letterSpacing: '1px' }}>
-              VIEW REPORTS →
-            </Link>
+        {/* Recent Transactions */}
+        <div className="anim anim4" style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: '14px', overflow: 'hidden' }}>
+          <div style={{
+            padding: '18px 24px', borderBottom: `1px solid ${C.border}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          }}>
+            <div>
+              <h3 style={{ fontSize: '14px', fontWeight: 700 }}>Recent Transactions</h3>
+              <p style={{ fontSize: '11px', color: C.textSub, marginTop: '2px' }}>Latest {txs.length} records</p>
+            </div>
+            <Link href="/reports" style={{
+              fontSize: '12px', color: C.teal, textDecoration: 'none',
+              fontWeight: 600, letterSpacing: '0.5px', display: 'flex', alignItems: 'center', gap: '4px',
+            }}>View All →</Link>
           </div>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
               <thead>
-                <tr style={{ borderBottom: `1px solid ${S.border}` }}>
-                  {['Product', 'Qty', 'Total', 'Time'].map(h => (
+                <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                  {['#', 'Product', 'Qty', 'Total', 'Time'].map((h, i) => (
                     <th key={h} style={{
-                      padding: '12px 24px', textAlign: h === 'Qty' || h === 'Total' ? 'right' : 'left',
-                      fontSize: '10px', fontWeight: 700, letterSpacing: '2px', color: S.muted,
+                      padding: '11px 20px', textAlign: i >= 2 ? 'right' : 'left',
+                      fontSize: '9px', fontWeight: 700, letterSpacing: '2px',
+                      color: C.muted, textTransform: 'uppercase',
                     }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={4} style={{ padding: '48px', textAlign: 'center', color: S.muted }}>Loading…</td></tr>
+                  <tr><td colSpan={5} style={{ padding: '48px', textAlign: 'center', color: C.muted }}>Loading…</td></tr>
                 ) : txs.length === 0 ? (
-                  <tr><td colSpan={4} style={{ padding: '48px', textAlign: 'center', color: S.muted }}>No transactions yet today</td></tr>
-                ) : txs.map((tx, i) => (
-                  <tr key={tx.id} style={{
-                    borderBottom: `1px solid ${S.border}`,
-                    background: i % 2 === 0 ? 'transparent' : `${S.border}40`,
-                  }}>
-                    <td style={{ padding: '14px 24px', color: S.text, fontWeight: 500 }}>
+                  <tr><td colSpan={5} style={{ padding: '48px', textAlign: 'center', color: C.muted }}>No transactions yet</td></tr>
+                ) : txs.slice(0, 10).map((tx, i) => (
+                  <tr key={tx.id} className="tr-row">
+                    <td style={{ padding: '13px 20px', color: C.muted, fontFamily: 'monospace', fontSize: '11px', background: 'transparent', transition: 'background 0.1s' }}>
+                      {(i + 1).toString().padStart(2, '0')}
+                    </td>
+                    <td style={{ padding: '13px 20px', color: C.text, fontWeight: 500, background: 'transparent', transition: 'background 0.1s' }}>
                       {tx.products?.name ?? '—'}
                     </td>
-                    <td style={{ padding: '14px 24px', textAlign: 'right', color: S.textSub, fontFamily: "'Bebas Neue', cursive", fontSize: '16px' }}>
-                      {tx.qty}
+                    <td style={{ padding: '13px 20px', textAlign: 'right', background: 'transparent', transition: 'background 0.1s' }}>
+                      <span style={{
+                        display: 'inline-block', padding: '2px 8px', borderRadius: '5px',
+                        background: C.tealGlow, color: C.teal,
+                        fontFamily: 'monospace', fontSize: '12px', fontWeight: 500,
+                      }}>×{tx.qty}</span>
                     </td>
-                    <td style={{ padding: '14px 24px', textAlign: 'right', color: S.amber, fontFamily: "'Bebas Neue', cursive", fontSize: '16px' }}>
+                    <td style={{ padding: '13px 20px', textAlign: 'right', fontFamily: "'DM Mono', monospace", fontSize: '14px', color: C.amber, fontWeight: 500, background: 'transparent', transition: 'background 0.1s' }}>
                       ₱{tx.total.toFixed(2)}
                     </td>
-                    <td style={{ padding: '14px 24px', color: S.muted, fontSize: '12px' }}>
+                    <td style={{ padding: '13px 20px', textAlign: 'right', color: C.textSub, fontSize: '11px', fontFamily: 'monospace', background: 'transparent', transition: 'background 0.1s' }}>
                       {new Date(tx.created_at).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })}
                     </td>
                   </tr>
@@ -256,7 +457,8 @@ export default function DashboardPage() {
             </table>
           </div>
         </div>
-      </div>
-    </main>
+
+      </main>
+    </div>
   )
 }

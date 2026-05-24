@@ -26,7 +26,7 @@ function RestockContent() {
   const [success, setSuccess] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!barcode) { setError('No barcode provided'); setLoading(false); return }
+    if (!barcode) { router.replace('/scan'); return }
     fetch(`/api/products?barcode=${encodeURIComponent(barcode)}`)
       .then(r => r.ok ? r.json() : Promise.reject('Product not found for barcode: ' + barcode))
       .then((data: Product) => { setProduct(data); setLoading(false) })

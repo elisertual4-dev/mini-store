@@ -8,6 +8,7 @@ export type StockLevel = {
   stock_qty: number
   low_stock_threshold: number
   category: string | null
+  image_url: string | null
   is_low_stock: boolean
 }
 

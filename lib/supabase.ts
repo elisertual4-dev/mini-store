@@ -13,9 +13,19 @@ function getClient(): SupabaseClient {
   return _client
 }
 
+function tryGetClient(): SupabaseClient | null {
+  try { return getClient() } catch { return null }
+}
+
 export const supabase = new Proxy({} as SupabaseClient, {
   get(_target, prop) {
-    const client = getClient()
+    const client = tryGetClient()
+    if (!client) {
+      // Return no-op for realtime methods when client unavailable (e.g. client bundle without baked env vars)
+      if (prop === 'channel') return () => ({ on: () => ({ subscribe: () => null }), subscribe: () => null })
+      if (prop === 'removeChannel') return () => {}
+      return undefined
+    }
     const value = Reflect.get(client, prop)
     return typeof value === 'function' ? value.bind(client) : value
   },
