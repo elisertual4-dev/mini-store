@@ -4,12 +4,12 @@ import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend,
-  BarChart, Bar, Cell,
+  BarChart, Bar,
 } from 'recharts'
 import type { StockLevel } from '@/lib/inventory'
 
 type DailySale = { date: string; total: number; original_total: number; count: number }
-type TopProduct = { name: string; qty: number; total: number; revenue: number }
+type TopProduct = { name: string; qty: number; total: number; revenue: number; category?: string | null; image_url?: string | null }
 type CategorySale = { category: string; total: number; revenue: number; qty: number; products: TopProduct[] }
 type CreditCustomer = { name: string; total: number; paid: number; unpaid: number; count: number; paid_count: number; unpaid_count: number }
 type CreditDay = { date: string; total: number; paid: number; unpaid: number; count: number }
@@ -379,31 +379,156 @@ export default function ReportsPage() {
           )}
         </div>
 
-        {/* Top Products Bar Chart */}
-        <div style={{ background: S.surface, border: `1px solid ${S.border}`, borderRadius: '16px', padding: '24px', marginBottom: '24px' }}>
-          <p style={{ fontSize: '11px', letterSpacing: '2px', color: S.muted, marginBottom: '20px', fontWeight: 700 }}>TOP SELLING PRODUCTS</p>
+        {/* Top Products — Editorial Leaderboard */}
+        <div style={{
+          position: 'relative', overflow: 'hidden',
+          background: `radial-gradient(at 0% 0%, ${S.amber}10 0%, transparent 50%), ${S.surface}`,
+          border: `1px solid ${S.border}`, borderRadius: '20px', padding: '28px 24px 22px', marginBottom: '24px',
+        }}>
+          <style>{`
+            @keyframes rankFill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+            @keyframes rowIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+            .tp-row { animation: rowIn 0.45s cubic-bezier(0.16, 1, 0.3, 1) both; }
+            .tp-bar { transform-origin: left; animation: rankFill 0.9s cubic-bezier(0.22, 1, 0.36, 1) both; }
+            .tp-row:hover .tp-thumb { transform: scale(1.06) rotate(-2deg); }
+            .tp-thumb { transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1); }
+          `}</style>
+
+          {/* Decorative corner numeral */}
+          <div aria-hidden style={{
+            position: 'absolute', top: '-12px', right: '12px',
+            fontFamily: "'Bebas Neue', cursive", fontSize: '120px',
+            color: S.amber, opacity: 0.05, letterSpacing: '-4px', lineHeight: 1, pointerEvents: 'none',
+          }}>TOP</div>
+
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '22px', position: 'relative' }}>
+            <div>
+              <p style={{ fontSize: '11px', letterSpacing: '3px', color: S.muted, fontWeight: 700 }}>TOP SELLING PRODUCTS</p>
+              <p style={{ fontSize: '11px', letterSpacing: '1px', color: S.textSub, marginTop: '4px' }}>
+                Ranked by net revenue (profit) · {data?.top_products?.length ?? 0} item{(data?.top_products?.length ?? 0) !== 1 ? 's' : ''}
+              </p>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '10px', color: S.muted, letterSpacing: '2px' }}>
+              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: S.amber }} />
+              LIVE
+            </div>
+          </div>
+
           {loading ? (
-            <div style={{ height: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: S.muted }}>Loading…</div>
+            <div style={{ height: '180px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: S.muted }}>Loading…</div>
           ) : !data?.top_products.length ? (
-            <div style={{ height: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: S.muted }}>No sales data</div>
-          ) : (
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={data.top_products} layout="vertical" margin={{ top: 0, right: 16, left: 8, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={S.border} horizontal={false} />
-                <XAxis type="number" tickFormatter={v => `₱${v}`} tick={{ fill: S.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis type="category" dataKey="name" tick={{ fill: S.textSub, fontSize: 12 }} axisLine={false} tickLine={false} width={120} />
-                <Tooltip
-                  contentStyle={{ background: S.surface, border: `1px solid ${S.border}`, borderRadius: '8px', fontFamily: 'Syne, sans-serif' }}
-                  formatter={(v, name) => [name === 'revenue' ? fmt(Number(v)) : v, name === 'revenue' ? 'Revenue' : 'Units']}
-                />
-                <Bar dataKey="revenue" radius={[0, 4, 4, 0]}>
-                  {(data.top_products).map((_, i) => (
-                    <Cell key={i} fill={BAR_COLORS[i % BAR_COLORS.length]} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          )}
+            <div style={{ height: '180px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: S.muted }}>No sales data</div>
+          ) : (() => {
+            const maxRev = Math.max(...data.top_products.map(p => p.revenue), 1)
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {data.top_products.map((p, i) => {
+                  const color = BAR_COLORS[i % BAR_COLORS.length]
+                  const pct = (p.revenue / maxRev) * 100
+                  const isFirst = i === 0
+                  return (
+                    <div
+                      key={p.name}
+                      className="tp-row"
+                      style={{ animationDelay: `${0.06 * i}s`, position: 'relative' }}
+                    >
+                      <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: '48px 56px 1fr auto',
+                        gap: '14px', alignItems: 'center', marginBottom: '6px',
+                      }}>
+                        {/* Rank */}
+                        <span style={{
+                          fontFamily: "'Bebas Neue', cursive",
+                          fontSize: isFirst ? '40px' : '32px',
+                          color: isFirst ? color : S.muted,
+                          letterSpacing: '-1px', lineHeight: 1,
+                          textShadow: isFirst ? `0 0 18px ${color}66` : 'none',
+                        }}>
+                          {String(i + 1).padStart(2, '0')}
+                        </span>
+
+                        {/* Thumb */}
+                        <div className="tp-thumb" style={{
+                          width: '48px', height: '48px', borderRadius: '12px', overflow: 'hidden',
+                          background: `linear-gradient(135deg, ${color}30, ${S.border})`,
+                          border: `1px solid ${color}40`,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          flexShrink: 0,
+                        }}>
+                          {p.image_url
+                            ? <img src={p.image_url} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            : <span style={{
+                                fontFamily: "'Bebas Neue', cursive", fontSize: '20px',
+                                color, opacity: 0.7,
+                              }}>{p.name.charAt(0).toUpperCase()}</span>
+                          }
+                        </div>
+
+                        {/* Name + category */}
+                        <div style={{ minWidth: 0 }}>
+                          <p style={{
+                            fontSize: '15px', fontWeight: 600, color: S.text,
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          }}>{p.name}</p>
+                          <p style={{
+                            fontSize: '10px', color: S.muted, letterSpacing: '1.5px',
+                            textTransform: 'uppercase', marginTop: '2px',
+                          }}>
+                            {p.category ?? 'Uncategorized'} · {p.qty} sold
+                          </p>
+                        </div>
+
+                        {/* Revenue */}
+                        <div style={{ textAlign: 'right' }}>
+                          <p style={{
+                            fontFamily: "'Bebas Neue', cursive", fontSize: '26px',
+                            color, letterSpacing: '1px', lineHeight: 1,
+                          }}>
+                            {fmt(p.revenue)}
+                          </p>
+                          <p style={{
+                            fontSize: '9px', color: S.muted, letterSpacing: '2px',
+                            marginTop: '4px', fontWeight: 700,
+                          }}>REVENUE</p>
+                        </div>
+                      </div>
+
+                      {/* Bar track */}
+                      <div style={{
+                        marginLeft: '62px',
+                        height: isFirst ? '8px' : '5px',
+                        background: `${S.border}90`,
+                        borderRadius: '999px',
+                        overflow: 'hidden',
+                        position: 'relative',
+                      }}>
+                        <div
+                          className="tp-bar"
+                          style={{
+                            height: '100%',
+                            width: `${pct}%`,
+                            background: `linear-gradient(90deg, ${color}, ${color}cc 60%, ${color}88)`,
+                            borderRadius: '999px',
+                            boxShadow: isFirst ? `0 0 14px ${color}80, inset 0 0 6px ${color}` : `0 0 6px ${color}60`,
+                            animationDelay: `${0.15 + 0.06 * i}s`,
+                          }}
+                        />
+                        {/* Shimmer tick at end */}
+                        <div style={{
+                          position: 'absolute', top: '-2px', height: 'calc(100% + 4px)',
+                          left: `${pct}%`, width: '2px',
+                          background: color, transform: 'translateX(-1px)',
+                          boxShadow: `0 0 8px ${color}`,
+                          opacity: pct > 2 ? 1 : 0,
+                        }} />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })()}
         </div>
 
         {/* Credit Activity */}

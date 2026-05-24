@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
 
   const { data: txs, error } = await supabase
     .from('transactions')
-    .select('*, original_price_at_sale, payment_method, customer_name, paid, paid_at, products(name, category)')
+    .select('*, original_price_at_sale, payment_method, customer_name, paid, paid_at, products(name, category, image_url)')
     .gte('created_at', fromDate.toISOString())
     .lte('created_at', toDate.toISOString())
     .order('created_at')
@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   const periodMap: Record<string, { date: string; total: number; original_total: number; count: number }> = {}
-  const prodMap: Record<string, { name: string; qty: number; total: number; revenue: number }> = {}
+  const prodMap: Record<string, { name: string; category: string | null; image_url: string | null; qty: number; total: number; revenue: number }> = {}
   const catMap: Record<string, {
     category: string
     total: number
@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
   let credit_unpaid_count = 0
 
   for (const t of txs ?? []) {
-    const prod = t.products as { name: string; category: string | null } | null
+    const prod = t.products as { name: string; category: string | null; image_url: string | null } | null
     const origCost = Number(t.original_price_at_sale ?? 0) * (t.qty ?? 0)
     const profit = t.total - origCost
 
@@ -66,7 +66,7 @@ export async function GET(req: NextRequest) {
     const name = prod?.name ?? 'Unknown'
     const category = prod?.category ?? 'Uncategorized'
 
-    if (!prodMap[name]) prodMap[name] = { name, qty: 0, total: 0, revenue: 0 }
+    if (!prodMap[name]) prodMap[name] = { name, category: prod?.category ?? null, image_url: prod?.image_url ?? null, qty: 0, total: 0, revenue: 0 }
     prodMap[name].qty += t.qty ?? 0
     prodMap[name].total += t.total
     prodMap[name].revenue += profit
