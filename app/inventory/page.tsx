@@ -129,7 +129,12 @@ export default function InventoryPage() {
         fd.append('file', resized)
         const res = await fetch('/api/upload-image', { method: 'POST', body: fd })
         const data = await res.json()
-        if (res.ok) image_url = data.url
+        if (!res.ok) {
+          setUploadError(data.error ?? `Upload failed (${res.status})`)
+          setAddLoading(false)
+          return
+        }
+        image_url = data.url
       }
       await fetch('/api/products', {
         method: 'POST',
