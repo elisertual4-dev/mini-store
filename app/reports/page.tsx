@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import {
-  ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid,
+  ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend,
   BarChart, Bar, Cell,
 } from 'recharts'
 import type { StockLevel } from '@/lib/inventory'
@@ -231,8 +231,11 @@ export default function ReportsPage() {
           ) : !data?.daily_sales.length ? (
             <div style={{ height: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: S.muted }}>No data for this period</div>
           ) : (
-            <ResponsiveContainer width="100%" height={220}>
-              <LineChart data={data.daily_sales} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+            <ResponsiveContainer width="100%" height={240}>
+              <LineChart
+                data={data.daily_sales.map(d => ({ ...d, revenue: d.total - d.original_total }))}
+                margin={{ top: 4, right: 4, left: 0, bottom: 0 }}
+              >
                 <CartesianGrid strokeDasharray="3 3" stroke={S.border} vertical={false} />
                 <XAxis dataKey="date" tickFormatter={(d) => fmtPeriod(String(d), period)} tick={{ fill: S.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
                 <YAxis tickFormatter={v => `₱${v}`} tick={{ fill: S.muted, fontSize: 11 }} axisLine={false} tickLine={false} width={70} />
@@ -240,9 +243,14 @@ export default function ReportsPage() {
                   contentStyle={{ background: S.surface, border: `1px solid ${S.border}`, borderRadius: '8px', fontFamily: 'Syne, sans-serif' }}
                   labelStyle={{ color: S.textSub, fontSize: '12px' }}
                   labelFormatter={(d) => fmtPeriod(String(d), period)}
-                  formatter={(v) => [fmt(Number(v)), 'Revenue']}
+                  formatter={(v, name) => [fmt(Number(v)), name === 'total' ? 'Sales' : 'Revenue']}
+                />
+                <Legend
+                  wrapperStyle={{ fontSize: '11px', letterSpacing: '1px', paddingTop: '8px' }}
+                  formatter={(name) => name === 'total' ? 'SALES' : 'REVENUE'}
                 />
                 <Line type="monotone" dataKey="total" stroke={S.amber} strokeWidth={2.5} dot={{ r: 4, fill: S.amber, strokeWidth: 0 }} activeDot={{ r: 6 }} />
+                <Line type="monotone" dataKey="revenue" stroke={S.green} strokeWidth={2.5} dot={{ r: 4, fill: S.green, strokeWidth: 0 }} activeDot={{ r: 6 }} />
               </LineChart>
             </ResponsiveContainer>
           )}
