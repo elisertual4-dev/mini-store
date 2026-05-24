@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend,
@@ -105,15 +105,16 @@ export default function ReportsPage() {
 
   useEffect(() => { load() }, [load])
 
-  async function syncSheets() {
+  const syncSheets = useCallback(async (opts?: { silent?: boolean }) => {
     setSyncing(true)
-    setSyncMsg(''); setSyncErr(false)
+    if (!opts?.silent) { setSyncMsg(''); setSyncErr(false) }
     try {
       const r = await fetch('/api/sync-sheets', { method: 'POST' })
       const j = await r.json().catch(() => ({}))
       if (r.ok) {
         const extra = j.credit_tx != null ? ` (${j.credit_tx} credit, ${j.customers ?? 0} customers)` : ''
-        setSyncMsg(`Synced ${j.synced} rows to Google Sheets${extra}`)
+        setSyncErr(false)
+        setSyncMsg(`${opts?.silent ? 'Auto-synced' : 'Synced'} ${j.synced} rows to Google Sheets${extra}`)
       } else {
         setSyncErr(true)
         setSyncMsg(j.error ?? `Sync failed (${r.status})`)
@@ -124,7 +125,16 @@ export default function ReportsPage() {
     } finally {
       setSyncing(false)
     }
-  }
+  }, [])
+
+  // Auto-sync once on first successful data load
+  const autoSyncedRef = useRef(false)
+  useEffect(() => {
+    if (autoSyncedRef.current) return
+    if (!data || loading) return
+    autoSyncedRef.current = true
+    syncSheets({ silent: true })
+  }, [data, loading, syncSheets])
 
   async function clearTransactions() {
     if (!confirm('Delete ALL transactions? This cannot be undone.')) return
@@ -201,7 +211,7 @@ export default function ReportsPage() {
             <span style={{ color: S.muted, fontSize: '12px' }}>to</span>
             <input type="date" value={to} onChange={e => setTo(e.target.value)}
               style={{ background: S.surface, border: `1px solid ${S.border}`, borderRadius: '8px', color: S.text, padding: '8px 12px', fontSize: '13px', fontFamily: 'inherit' }} />
-            <button onClick={syncSheets} disabled={syncing} style={{
+            <button onClick={() => syncSheets()} disabled={syncing} style={{
               padding: '8px 16px', background: 'transparent', border: `1px solid ${S.border}`,
               borderRadius: '8px', color: S.textSub, fontSize: '12px', fontWeight: 700,
               letterSpacing: '1px', cursor: 'pointer', fontFamily: 'inherit',
