@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 
-// Settling a credit = "convert to cash sale on payment"
-// Flips payment_method -> cash, paid -> true, sets paid_at = now
+// Settling a credit: flips paid -> true, sets paid_at = now.
+// payment_method stays 'credit' so reports can still attribute the
+// transaction to credit sales (paid vs unpaid distinguished by `paid`).
 export async function PATCH(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
@@ -21,7 +22,7 @@ export async function PATCH(_req: NextRequest, { params }: { params: Promise<{ i
 
   const { data, error } = await supabase
     .from('transactions')
-    .update({ paid: true, payment_method: 'cash', paid_at: new Date().toISOString() })
+    .update({ paid: true, paid_at: new Date().toISOString() })
     .eq('id', id)
     .select()
     .single()

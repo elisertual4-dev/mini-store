@@ -11,6 +11,18 @@ import type { StockLevel } from '@/lib/inventory'
 type DailySale = { date: string; total: number; original_total: number; count: number }
 type TopProduct = { name: string; qty: number; total: number; revenue: number }
 type CategorySale = { category: string; total: number; revenue: number; qty: number; products: TopProduct[] }
+type CreditCustomer = { name: string; total: number; paid: number; unpaid: number; count: number; paid_count: number; unpaid_count: number }
+type CreditDay = { date: string; total: number; paid: number; unpaid: number; count: number }
+type CreditsSummary = {
+  total: number
+  paid_total: number
+  unpaid_total: number
+  count: number
+  paid_count: number
+  unpaid_count: number
+  by_customer: CreditCustomer[]
+  by_day: CreditDay[]
+}
 type Period = 'day' | 'month' | 'year'
 type ReportData = {
   period: Period
@@ -18,6 +30,7 @@ type ReportData = {
   top_products: TopProduct[]
   category_sales: CategorySale[]
   stock_snapshot: StockLevel[]
+  credits: CreditsSummary
 }
 
 const S = {
@@ -372,6 +385,93 @@ export default function ReportsPage() {
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
+          )}
+        </div>
+
+        {/* Credit Activity */}
+        <div style={{ background: S.surface, border: `1px solid ${S.border}`, borderRadius: '16px', padding: '24px', marginBottom: '24px' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '18px', flexWrap: 'wrap', gap: '8px' }}>
+            <p style={{ fontSize: '11px', letterSpacing: '2px', color: S.muted, fontWeight: 700 }}>CREDIT ACTIVITY (IN RANGE)</p>
+            <p style={{ fontSize: '10px', letterSpacing: '1px', color: S.muted }}>{data?.credits?.count ?? 0} credit sale{(data?.credits?.count ?? 0) !== 1 ? 's' : ''}</p>
+          </div>
+
+          {loading ? (
+            <div style={{ height: '80px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: S.muted }}>Loading…</div>
+          ) : !data?.credits || data.credits.count === 0 ? (
+            <div style={{ height: '80px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: S.muted }}>No credit transactions in this period</div>
+          ) : (
+            <>
+              {/* Credit summary cards */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '20px' }} className="rp-summary">
+                {[
+                  { label: 'TOTAL CREDIT SALES', value: fmt(data.credits.total), sub: `${data.credits.count} tx`, accent: S.amber },
+                  { label: 'COLLECTED (PAID)', value: fmt(data.credits.paid_total), sub: `${data.credits.paid_count} tx`, accent: S.green },
+                  { label: 'OUTSTANDING (UNPAID)', value: fmt(data.credits.unpaid_total), sub: `${data.credits.unpaid_count} tx`, accent: S.red },
+                ].map((c, i) => (
+                  <div key={i} style={{ background: S.bg, border: `1px solid ${S.border}`, borderTop: `2px solid ${c.accent}`, borderRadius: '12px', padding: '14px 16px' }}>
+                    <p style={{ fontSize: '9px', letterSpacing: '1.5px', color: S.muted, marginBottom: '6px', fontWeight: 700 }}>{c.label}</p>
+                    <span style={{ fontFamily: "'Bebas Neue', cursive", fontSize: '26px', color: c.accent }}>{c.value}</span>
+                    <p style={{ fontSize: '10px', color: S.muted, marginTop: '2px' }}>{c.sub}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* By Customer breakdown */}
+              <div style={{ background: S.bg, border: `1px solid ${S.border}`, borderRadius: '12px', overflow: 'hidden', marginBottom: '14px' }}>
+                <div style={{ padding: '12px 16px', borderBottom: `1px solid ${S.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <p style={{ fontSize: '10px', letterSpacing: '1.5px', color: S.muted, fontWeight: 700 }}>BY CUSTOMER</p>
+                  <p style={{ fontSize: '10px', color: S.muted }}>{data.credits.by_customer.length} customer{data.credits.by_customer.length !== 1 ? 's' : ''}</p>
+                </div>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                    <thead>
+                      <tr style={{ background: `${S.border}40` }}>
+                        {['Customer', 'Total', 'Paid', 'Unpaid', 'Tx'].map((h, i) => (
+                          <th key={h} style={{
+                            padding: '9px 16px',
+                            textAlign: i === 0 ? 'left' : 'right',
+                            fontSize: '9px', letterSpacing: '1px', color: S.muted, fontWeight: 700,
+                          }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.credits.by_customer.map(cu => (
+                        <tr key={cu.name} style={{ borderTop: `1px solid ${S.border}40` }}>
+                          <td style={{ padding: '10px 16px', color: S.text, fontWeight: 600 }}>{cu.name}</td>
+                          <td style={{ padding: '10px 16px', textAlign: 'right', fontFamily: "'Bebas Neue', cursive", fontSize: '16px', color: S.amber }}>{fmt(cu.total)}</td>
+                          <td style={{ padding: '10px 16px', textAlign: 'right', color: S.green, fontWeight: 500 }}>{fmt(cu.paid)}</td>
+                          <td style={{ padding: '10px 16px', textAlign: 'right', color: cu.unpaid > 0 ? S.red : S.muted, fontWeight: 500 }}>{fmt(cu.unpaid)}</td>
+                          <td style={{ padding: '10px 16px', textAlign: 'right', color: S.textSub, fontFamily: 'monospace' }}>
+                            {cu.count} ({cu.paid_count}P/{cu.unpaid_count}U)
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Daily credit chart */}
+              <div style={{ background: S.bg, border: `1px solid ${S.border}`, borderRadius: '12px', padding: '14px 16px' }}>
+                <p style={{ fontSize: '10px', letterSpacing: '1.5px', color: S.muted, fontWeight: 700, marginBottom: '12px' }}>DAILY CREDIT VOLUME</p>
+                <ResponsiveContainer width="100%" height={160}>
+                  <BarChart data={data.credits.by_day} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={S.border} vertical={false} />
+                    <XAxis dataKey="date" tickFormatter={d => fmtDate(String(d))} tick={{ fill: S.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <YAxis tickFormatter={v => `₱${v}`} tick={{ fill: S.muted, fontSize: 11 }} axisLine={false} tickLine={false} width={60} />
+                    <Tooltip
+                      contentStyle={{ background: S.surface, border: `1px solid ${S.border}`, borderRadius: '8px', fontFamily: 'Syne, sans-serif' }}
+                      labelFormatter={d => fmtDate(String(d))}
+                      formatter={(v, name) => [fmt(Number(v)), name === 'paid' ? 'Paid' : 'Unpaid']}
+                    />
+                    <Legend wrapperStyle={{ fontSize: '10px', letterSpacing: '1px' }} formatter={n => n === 'paid' ? 'PAID' : 'UNPAID'} />
+                    <Bar dataKey="paid" stackId="a" fill={S.green} radius={[0, 0, 0, 0]} />
+                    <Bar dataKey="unpaid" stackId="a" fill={S.red} radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </>
           )}
         </div>
 
