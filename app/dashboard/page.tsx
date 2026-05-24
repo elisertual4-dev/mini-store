@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -160,6 +160,8 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [live, setLive] = useState(false)
   const [payingId, setPayingId] = useState<string | null>(null)
+  const [creditView, setCreditView] = useState<'customer' | 'daily' | 'all'>('customer')
+  const [expandedGroup, setExpandedGroup] = useState<Record<string, boolean>>({})
 
   const fetchMetrics = useCallback(async () => {
     const r = await fetch('/api/dashboard')
@@ -208,6 +210,34 @@ export default function DashboardPage() {
     } catch { /* realtime unavailable */ }
     return () => { if (channel) supabase.removeChannel(channel) }
   }, [fetchMetrics, fetchTxs, fetchCredits])
+
+  // credit groupings
+  const creditsByCustomer = useMemo(() => {
+    if (!credits) return []
+    const map: Record<string, { key: string; name: string; total: number; count: number; items: Credit[] }> = {}
+    for (const c of credits.credits) {
+      const name = (c.customer_name ?? '—').trim() || '—'
+      const k = name.toLowerCase()
+      if (!map[k]) map[k] = { key: k, name, total: 0, count: 0, items: [] }
+      map[k].total += Number(c.total ?? 0)
+      map[k].count += 1
+      map[k].items.push(c)
+    }
+    return Object.values(map).sort((a, b) => b.total - a.total)
+  }, [credits])
+
+  const creditsByDay = useMemo(() => {
+    if (!credits) return []
+    const map: Record<string, { key: string; date: string; total: number; count: number; items: Credit[] }> = {}
+    for (const c of credits.credits) {
+      const d = c.created_at.slice(0, 10)
+      if (!map[d]) map[d] = { key: d, date: d, total: 0, count: 0, items: [] }
+      map[d].total += Number(c.total ?? 0)
+      map[d].count += 1
+      map[d].items.push(c)
+    }
+    return Object.values(map).sort((a, b) => b.date.localeCompare(a.date))
+  }, [credits])
 
   // hourly sales chart
   const chartData = (() => {
@@ -510,6 +540,7 @@ export default function DashboardPage() {
           <div style={{
             padding: '18px 24px', borderBottom: `1px solid ${C.border}`,
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            flexWrap: 'wrap', gap: '12px',
           }}>
             <div>
               <h3 style={{ fontSize: '14px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -524,21 +555,43 @@ export default function DashboardPage() {
               </h3>
               <p style={{ fontSize: '11px', color: C.textSub, marginTop: '2px' }}>Unpaid transactions awaiting settlement</p>
             </div>
-            {credits && (
-              <span style={{
-                fontFamily: "'DM Mono', monospace", fontSize: '18px', fontWeight: 500,
-                color: credits.total_outstanding > 0 ? C.coral : C.muted,
-              }}>
-                ₱{credits.total_outstanding.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
-              </span>
-            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', border: `1px solid ${C.border}`, borderRadius: '10px', overflow: 'hidden' }}>
+                {([
+                  { id: 'customer' as const, label: 'BY CUSTOMER' },
+                  { id: 'daily' as const, label: 'DAILY' },
+                  { id: 'all' as const, label: 'ALL' },
+                ]).map(opt => (
+                  <button
+                    key={opt.id}
+                    onClick={() => { setCreditView(opt.id); setExpandedGroup({}) }}
+                    style={{
+                      padding: '6px 12px', fontSize: '10px', fontWeight: 700, letterSpacing: '1.5px',
+                      background: creditView === opt.id ? C.teal : 'transparent',
+                      color: creditView === opt.id ? '#000' : C.textSub,
+                      border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              {credits && (
+                <span style={{
+                  fontFamily: "'DM Mono', monospace", fontSize: '18px', fontWeight: 500,
+                  color: credits.total_outstanding > 0 ? C.coral : C.muted,
+                }}>
+                  ₱{credits.total_outstanding.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                </span>
+              )}
+            </div>
           </div>
           <div style={{ overflowX: 'auto' }}>
             {loading ? (
               <div style={{ padding: '36px', textAlign: 'center', color: C.muted, fontSize: '13px' }}>Loading…</div>
             ) : !credits || credits.credits.length === 0 ? (
               <div style={{ padding: '36px', textAlign: 'center', color: C.muted, fontSize: '13px' }}>No outstanding credits</div>
-            ) : (
+            ) : creditView === 'all' ? (
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                 <thead>
                   <tr style={{ borderBottom: `1px solid ${C.border}` }}>
@@ -592,6 +645,105 @@ export default function DashboardPage() {
                   ))}
                 </tbody>
               </table>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {(creditView === 'customer' ? creditsByCustomer : creditsByDay).map(g => {
+                  const expanded = expandedGroup[g.key] ?? false
+                  const heading = creditView === 'customer'
+                    ? (g as typeof creditsByCustomer[number]).name
+                    : new Date((g as typeof creditsByDay[number]).date + 'T00:00:00').toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
+                  return (
+                    <div key={g.key} style={{ borderBottom: `1px solid ${C.border}` }}>
+                      <button
+                        onClick={() => setExpandedGroup(s => ({ ...s, [g.key]: !expanded }))}
+                        style={{
+                          width: '100%', background: 'transparent', border: 'none',
+                          padding: '14px 24px', display: 'flex', alignItems: 'center',
+                          justifyContent: 'space-between', cursor: 'pointer', color: C.text,
+                          fontFamily: 'inherit', textAlign: 'left',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+                          <span style={{ color: C.muted, fontSize: '11px', transform: expanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}>▶</span>
+                          <span style={{ fontSize: '14px', fontWeight: 600, color: C.text }}>{heading}</span>
+                          <span style={{
+                            display: 'inline-block', padding: '2px 8px', borderRadius: '999px',
+                            background: C.amberGlow, color: C.amber,
+                            fontFamily: 'monospace', fontSize: '10px', fontWeight: 600,
+                          }}>{g.count} item{g.count !== 1 ? 's' : ''}</span>
+                        </div>
+                        <span style={{
+                          fontFamily: "'DM Mono', monospace", fontSize: '15px', fontWeight: 500, color: C.coral,
+                        }}>
+                          ₱{g.total.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                        </span>
+                      </button>
+                      {expanded && (
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', background: `${C.border}20` }}>
+                          <thead>
+                            <tr style={{ borderTop: `1px solid ${C.border}` }}>
+                              {(creditView === 'customer'
+                                ? ['Product', 'Qty', 'Amount', 'Date', '']
+                                : ['Customer', 'Product', 'Qty', 'Amount', '']
+                              ).map((h, i, arr) => (
+                                <th key={h + i} style={{
+                                  padding: '8px 24px',
+                                  textAlign: i === arr.length - 1 ? 'center' : (h === 'Qty' || h === 'Amount' || h === 'Date') ? 'right' : 'left',
+                                  fontSize: '9px', fontWeight: 700, letterSpacing: '2px',
+                                  color: C.muted, textTransform: 'uppercase',
+                                }}>{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {g.items.map(c => (
+                              <tr key={c.id} style={{ borderTop: `1px solid ${C.border}40` }}>
+                                {creditView === 'customer' ? (
+                                  <td style={{ padding: '9px 24px', color: C.textSub }}>{c.products?.name ?? '—'}</td>
+                                ) : (
+                                  <td style={{ padding: '9px 24px', color: C.text, fontWeight: 500 }}>{c.customer_name ?? '—'}</td>
+                                )}
+                                {creditView === 'daily' && (
+                                  <td style={{ padding: '9px 24px', color: C.textSub }}>{c.products?.name ?? '—'}</td>
+                                )}
+                                <td style={{ padding: '9px 24px', textAlign: 'right' }}>
+                                  <span style={{
+                                    display: 'inline-block', padding: '1px 7px', borderRadius: '5px',
+                                    background: C.amberGlow, color: C.amber,
+                                    fontFamily: 'monospace', fontSize: '11px', fontWeight: 500,
+                                  }}>×{c.qty}</span>
+                                </td>
+                                <td style={{ padding: '9px 24px', textAlign: 'right', fontFamily: "'DM Mono', monospace", fontSize: '13px', color: C.coral, fontWeight: 500 }}>
+                                  ₱{Number(c.total).toFixed(2)}
+                                </td>
+                                {creditView === 'customer' && (
+                                  <td style={{ padding: '9px 24px', textAlign: 'right', color: C.textSub, fontSize: '11px', fontFamily: 'monospace' }}>
+                                    {new Date(c.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}
+                                  </td>
+                                )}
+                                <td style={{ padding: '9px 24px', textAlign: 'center' }}>
+                                  <button
+                                    onClick={() => markPaid(c.id)}
+                                    disabled={payingId === c.id}
+                                    style={{
+                                      padding: '5px 10px', background: C.teal, color: '#000',
+                                      border: 'none', borderRadius: '7px', cursor: 'pointer',
+                                      fontSize: '10px', fontWeight: 700, letterSpacing: '0.5px',
+                                      opacity: payingId === c.id ? 0.5 : 1,
+                                    }}
+                                  >
+                                    {payingId === c.id ? '…' : 'PAID'}
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
             )}
           </div>
         </div>
