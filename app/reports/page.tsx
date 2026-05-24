@@ -9,8 +9,8 @@ import {
 import type { StockLevel } from '@/lib/inventory'
 
 type DailySale = { date: string; total: number; original_total: number; count: number }
-type TopProduct = { name: string; qty: number; total: number }
-type CategorySale = { category: string; total: number; qty: number; products: TopProduct[] }
+type TopProduct = { name: string; qty: number; total: number; revenue: number }
+type CategorySale = { category: string; total: number; revenue: number; qty: number; products: TopProduct[] }
 type Period = 'day' | 'month' | 'year'
 type ReportData = {
   period: Period
@@ -263,7 +263,8 @@ export default function ReportsPage() {
               {data.category_sales.map((c, i) => {
                 const expanded = expandedCats[c.category] ?? false
                 const accent = BAR_COLORS[i % BAR_COLORS.length]
-                const pct = data.category_sales[0]?.total ? (c.total / data.category_sales[0].total) * 100 : 0
+                const topRevenue = data.category_sales[0]?.revenue ?? 0
+                const pct = topRevenue ? (c.revenue / topRevenue) * 100 : 0
                 return (
                   <div key={c.category} style={{ background: S.bg, border: `1px solid ${S.border}`, borderRadius: '12px', overflow: 'hidden' }}>
                     <button
@@ -283,7 +284,7 @@ export default function ReportsPage() {
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                         <span style={{ fontFamily: "'Bebas Neue', cursive", fontSize: '22px', color: accent, letterSpacing: '1px' }}>
-                          {fmt(c.total)}
+                          {fmt(c.revenue)}
                         </span>
                         <span style={{ color: S.muted, fontSize: '12px', transform: expanded ? 'rotate(90deg)' : 'rotate(0)', transition: 'transform 0.15s' }}>▶</span>
                       </div>
@@ -308,7 +309,7 @@ export default function ReportsPage() {
                               <tr key={p.name} style={{ borderTop: `1px solid ${S.border}40` }}>
                                 <td style={{ padding: '6px 0', color: S.text }}>{p.name}</td>
                                 <td style={{ padding: '6px 0', textAlign: 'right', color: S.textSub }}>{p.qty}</td>
-                                <td style={{ padding: '6px 0', textAlign: 'right', color: accent, fontWeight: 600 }}>{fmt(p.total)}</td>
+                                <td style={{ padding: '6px 0', textAlign: 'right', color: accent, fontWeight: 600 }}>{fmt(p.revenue)}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -337,9 +338,9 @@ export default function ReportsPage() {
                 <YAxis type="category" dataKey="name" tick={{ fill: S.textSub, fontSize: 12 }} axisLine={false} tickLine={false} width={120} />
                 <Tooltip
                   contentStyle={{ background: S.surface, border: `1px solid ${S.border}`, borderRadius: '8px', fontFamily: 'Syne, sans-serif' }}
-                  formatter={(v, name) => [name === 'total' ? fmt(Number(v)) : v, name === 'total' ? 'Revenue' : 'Units']}
+                  formatter={(v, name) => [name === 'revenue' ? fmt(Number(v)) : v, name === 'revenue' ? 'Revenue' : 'Units']}
                 />
-                <Bar dataKey="total" radius={[0, 4, 4, 0]}>
+                <Bar dataKey="revenue" radius={[0, 4, 4, 0]}>
                   {(data.top_products).map((_, i) => (
                     <Cell key={i} fill={BAR_COLORS[i % BAR_COLORS.length]} />
                   ))}
