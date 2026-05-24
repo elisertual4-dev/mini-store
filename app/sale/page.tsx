@@ -27,6 +27,8 @@ function SaleContent() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'credit'>('cash')
+  const [customerName, setCustomerName] = useState('')
 
   const photoInputRef = useRef<HTMLInputElement>(null)
 
@@ -70,17 +72,28 @@ function SaleContent() {
 
   async function handleSale() {
     if (!product) return
+    if (paymentMethod === 'credit' && !customerName.trim()) {
+      setError('Customer name required for credit sale')
+      return
+    }
     setSubmitting(true)
     setError(null)
     try {
       const res = await fetch('/api/transactions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ product_id: product.id, qty, total: product.price * qty }),
+        body: JSON.stringify({
+          product_id: product.id,
+          qty,
+          total: product.price * qty,
+          payment_method: paymentMethod,
+          customer_name: paymentMethod === 'credit' ? customerName.trim() : null,
+        }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
-      setSuccess(`Sale recorded. Total: ₱${(product.price * qty).toFixed(2)}`)
+      const label = paymentMethod === 'credit' ? `Credit recorded for ${customerName.trim()}` : 'Sale recorded'
+      setSuccess(`${label}. Total: ₱${(product.price * qty).toFixed(2)}`)
     } catch (e: unknown) {
       setError((e as Error).message)
     } finally {
@@ -215,12 +228,42 @@ function SaleContent() {
               <span className="text-xl font-bold">₱{(product.price * qty).toFixed(2)}</span>
             </div>
 
+            <div className="flex flex-col gap-2">
+              <span className="text-xs text-gray-500 uppercase tracking-wider">Payment</span>
+              <div className="flex rounded-xl overflow-hidden border border-gray-700">
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('cash')}
+                  className={`flex-1 py-2.5 text-sm font-semibold transition-colors ${paymentMethod === 'cash' ? 'bg-green-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
+                >
+                  CASH
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('credit')}
+                  className={`flex-1 py-2.5 text-sm font-semibold transition-colors ${paymentMethod === 'credit' ? 'bg-amber-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
+                >
+                  CREDIT
+                </button>
+              </div>
+              {paymentMethod === 'credit' && (
+                <input
+                  type="text"
+                  value={customerName}
+                  onChange={e => setCustomerName(e.target.value)}
+                  placeholder="Customer name"
+                  className="bg-gray-700 border border-gray-600 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-amber-500"
+                  maxLength={120}
+                />
+              )}
+            </div>
+
             <button
               onClick={handleSale}
               disabled={submitting || product.stock_qty === 0}
-              className="w-full py-3 rounded-xl font-bold text-sm bg-blue-600 hover:bg-blue-700 disabled:opacity-50 transition-colors"
+              className={`w-full py-3 rounded-xl font-bold text-sm disabled:opacity-50 transition-colors ${paymentMethod === 'credit' ? 'bg-amber-600 hover:bg-amber-700' : 'bg-blue-600 hover:bg-blue-700'}`}
             >
-              {submitting ? 'Processing…' : `Confirm Sale · ₱${(product.price * qty).toFixed(2)}`}
+              {submitting ? 'Processing…' : `${paymentMethod === 'credit' ? 'Confirm Credit' : 'Confirm Sale'} · ₱${(product.price * qty).toFixed(2)}`}
             </button>
 
             <button onClick={() => router.push('/scan')} className="text-gray-500 text-xs text-center hover:text-gray-300">Cancel</button>

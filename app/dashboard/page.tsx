@@ -45,6 +45,17 @@ type Transaction = {
   products: { name: string; barcode: string | null; price: number; image_url: string | null } | null
 }
 
+type Credit = {
+  id: string
+  created_at: string
+  total: number
+  qty: number
+  customer_name: string | null
+  products: { name: string; image_url: string | null } | null
+}
+
+type CreditsData = { credits: Credit[]; total_outstanding: number; count: number }
+
 const NAV = [
   { href: '/dashboard', label: 'Dashboard', icon: '▣' },
   { href: '/inventory', label: 'Inventory', icon: '⊞' },
@@ -145,8 +156,10 @@ const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?:
 export default function DashboardPage() {
   const [metrics, setMetrics] = useState<Metrics | null>(null)
   const [txs, setTxs] = useState<Transaction[]>([])
+  const [credits, setCredits] = useState<CreditsData | null>(null)
   const [loading, setLoading] = useState(true)
   const [live, setLive] = useState(false)
+  const [payingId, setPayingId] = useState<string | null>(null)
 
   const fetchMetrics = useCallback(async () => {
     const r = await fetch('/api/dashboard')
@@ -158,19 +171,43 @@ export default function DashboardPage() {
     if (r.ok) setTxs(await r.json())
   }, [])
 
+  const fetchCredits = useCallback(async () => {
+    const r = await fetch('/api/credits')
+    if (r.ok) setCredits(await r.json())
+  }, [])
+
+  async function markPaid(id: string) {
+    if (!confirm('Mark this credit as paid? Transaction converts to cash sale.')) return
+    setPayingId(id)
+    try {
+      const r = await fetch(`/api/credits/${id}/pay`, { method: 'PATCH' })
+      if (r.ok) {
+        await Promise.all([fetchCredits(), fetchTxs(), fetchMetrics()])
+      } else {
+        const j = await r.json().catch(() => ({}))
+        alert('Failed: ' + (j.error ?? r.statusText))
+      }
+    } finally {
+      setPayingId(null)
+    }
+  }
+
   useEffect(() => {
-    Promise.all([fetchMetrics(), fetchTxs()]).finally(() => setLoading(false))
+    Promise.all([fetchMetrics(), fetchTxs(), fetchCredits()]).finally(() => setLoading(false))
     let channel: ReturnType<typeof supabase.channel> | null = null
     try {
       channel = supabase
         .channel('dash-rt')
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'transactions' }, () => {
-          fetchMetrics(); fetchTxs()
+          fetchMetrics(); fetchTxs(); fetchCredits()
+        })
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'transactions' }, () => {
+          fetchMetrics(); fetchTxs(); fetchCredits()
         })
         .subscribe(s => setLive(s === 'SUBSCRIBED'))
     } catch { /* realtime unavailable */ }
     return () => { if (channel) supabase.removeChannel(channel) }
-  }, [fetchMetrics, fetchTxs])
+  }, [fetchMetrics, fetchTxs, fetchCredits])
 
   // hourly sales chart
   const chartData = (() => {
@@ -409,8 +446,99 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {/* Outstanding Credits */}
+        <div className="anim anim4" style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: '14px', overflow: 'hidden', marginBottom: '22px' }}>
+          <div style={{
+            padding: '18px 24px', borderBottom: `1px solid ${C.border}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          }}>
+            <div>
+              <h3 style={{ fontSize: '14px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '10px' }}>
+                Outstanding Credits
+                {credits && credits.count > 0 && (
+                  <span style={{
+                    display: 'inline-block', padding: '2px 8px', borderRadius: '999px',
+                    background: C.amberGlow, color: C.amber,
+                    fontFamily: 'monospace', fontSize: '11px', fontWeight: 600,
+                  }}>{credits.count}</span>
+                )}
+              </h3>
+              <p style={{ fontSize: '11px', color: C.textSub, marginTop: '2px' }}>Unpaid transactions awaiting settlement</p>
+            </div>
+            {credits && (
+              <span style={{
+                fontFamily: "'DM Mono', monospace", fontSize: '18px', fontWeight: 500,
+                color: credits.total_outstanding > 0 ? C.coral : C.muted,
+              }}>
+                ₱{credits.total_outstanding.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+              </span>
+            )}
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            {loading ? (
+              <div style={{ padding: '36px', textAlign: 'center', color: C.muted, fontSize: '13px' }}>Loading…</div>
+            ) : !credits || credits.credits.length === 0 ? (
+              <div style={{ padding: '36px', textAlign: 'center', color: C.muted, fontSize: '13px' }}>No outstanding credits</div>
+            ) : (
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                <thead>
+                  <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                    {['Customer', 'Product', 'Qty', 'Amount', 'Date', ''].map((h, i) => (
+                      <th key={h + i} style={{
+                        padding: '11px 20px',
+                        textAlign: i >= 2 && i <= 3 ? 'right' : i === 5 ? 'center' : 'left',
+                        fontSize: '9px', fontWeight: 700, letterSpacing: '2px',
+                        color: C.muted, textTransform: 'uppercase',
+                      }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {credits.credits.map(c => (
+                    <tr key={c.id} className="tr-row">
+                      <td style={{ padding: '13px 20px', color: C.text, fontWeight: 500, background: 'transparent', transition: 'background 0.1s' }}>
+                        {c.customer_name ?? '—'}
+                      </td>
+                      <td style={{ padding: '13px 20px', color: C.textSub, background: 'transparent', transition: 'background 0.1s' }}>
+                        {c.products?.name ?? '—'}
+                      </td>
+                      <td style={{ padding: '13px 20px', textAlign: 'right', background: 'transparent', transition: 'background 0.1s' }}>
+                        <span style={{
+                          display: 'inline-block', padding: '2px 8px', borderRadius: '5px',
+                          background: C.amberGlow, color: C.amber,
+                          fontFamily: 'monospace', fontSize: '12px', fontWeight: 500,
+                        }}>×{c.qty}</span>
+                      </td>
+                      <td style={{ padding: '13px 20px', textAlign: 'right', fontFamily: "'DM Mono', monospace", fontSize: '14px', color: C.coral, fontWeight: 500, background: 'transparent', transition: 'background 0.1s' }}>
+                        ₱{Number(c.total).toFixed(2)}
+                      </td>
+                      <td style={{ padding: '13px 20px', textAlign: 'right', color: C.textSub, fontSize: '11px', fontFamily: 'monospace', background: 'transparent', transition: 'background 0.1s' }}>
+                        {new Date(c.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}
+                      </td>
+                      <td style={{ padding: '13px 20px', textAlign: 'center', background: 'transparent', transition: 'background 0.1s' }}>
+                        <button
+                          onClick={() => markPaid(c.id)}
+                          disabled={payingId === c.id}
+                          style={{
+                            padding: '6px 12px', background: C.teal, color: '#000',
+                            border: 'none', borderRadius: '8px', cursor: 'pointer',
+                            fontSize: '11px', fontWeight: 700, letterSpacing: '0.5px',
+                            opacity: payingId === c.id ? 0.5 : 1,
+                          }}
+                        >
+                          {payingId === c.id ? '…' : 'MARK PAID'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+
         {/* Recent Transactions */}
-        <div className="anim anim4" style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: '14px', overflow: 'hidden' }}>
+        <div className="anim anim5" style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: '14px', overflow: 'hidden' }}>
           <div style={{
             padding: '18px 24px', borderBottom: `1px solid ${C.border}`,
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',

@@ -23,10 +23,17 @@ export async function DELETE() {
 
 export async function POST(req: NextRequest) {
   const body = await req.json()
-  const { product_id, qty, total, staff_id } = body
+  const { product_id, qty, total, staff_id, payment_method, customer_name } = body
 
   if (!product_id || !qty || total == null) {
     return NextResponse.json({ error: 'product_id, qty, total required' }, { status: 400 })
+  }
+
+  const method = payment_method === 'credit' ? 'credit' : 'cash'
+  const isCredit = method === 'credit'
+
+  if (isCredit && !(typeof customer_name === 'string' && customer_name.trim())) {
+    return NextResponse.json({ error: 'customer_name required for credit sale' }, { status: 400 })
   }
 
   // Check sufficient stock before insert
@@ -48,7 +55,16 @@ export async function POST(req: NextRequest) {
   // Insert triggers DB trigger: auto-decrements stock_qty + inserts inventory_log
   const { data, error } = await supabase
     .from('transactions')
-    .insert({ product_id, qty, total, staff_id })
+    .insert({
+      product_id,
+      qty,
+      total,
+      staff_id,
+      payment_method: method,
+      customer_name: isCredit ? customer_name.trim() : null,
+      paid: !isCredit,
+      paid_at: isCredit ? null : new Date().toISOString(),
+    })
     .select()
     .single()
 
