@@ -1,7 +1,7 @@
 {
-  "name": "Mini Store",
-  "short_name": "MiniStore",
-  "description": "Mini store inventory and POS system",
+  "name": "Hanz Mini Store",
+  "short_name": "HanzMiniStore",
+  "description": "Hanz Mini Store inventory and POS system",
   "start_url": "/scan",
   "display": "fullscreen",
   "orientation": "portrait",

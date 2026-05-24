@@ -6,10 +6,10 @@ import './globals.css'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Mini Store',
-  description: 'Mini store inventory & POS system',
+  title: 'Hanz Mini Store',
+  description: 'Hanz Mini Store inventory & POS system',
   manifest: '/manifest.json',
-  appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'Mini Store' },
+  appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'Hanz Mini Store' },
 }
 
 export const viewport: Viewport = {

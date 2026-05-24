@@ -333,7 +333,7 @@ export default function DashboardPage() {
       {/* Mobile top bar */}
       <div className="ds-mobile-topbar">
         <div style={{ fontFamily: "'DM Mono', monospace", fontSize: '12px', letterSpacing: '3px', color: C.teal, fontWeight: 600 }}>
-          MINI STORE
+          HANZ MINI STORE
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <span style={{
@@ -358,7 +358,7 @@ export default function DashboardPage() {
           <div style={{
             fontFamily: "'DM Mono', monospace", fontSize: '13px', fontWeight: 500,
             letterSpacing: '4px', color: C.teal, marginBottom: '2px',
-          }}>MINI STORE</div>
+          }}>HANZ MINI STORE</div>
           <div style={{ fontSize: '10px', color: C.muted, letterSpacing: '1px' }}>POS SYSTEM</div>
         </div>
 
