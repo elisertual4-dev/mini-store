@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { BrowserMultiFormatReader } from '@zxing/browser'
 
@@ -57,7 +58,20 @@ export default function ScanPage() {
 
   return (
     <main className="min-h-screen bg-gray-950 text-white flex flex-col items-center p-4 gap-4">
-      <h1 className="text-xl font-bold mt-2">Barcode Scanner</h1>
+      <div className="w-full max-w-xs flex items-center justify-between mt-2">
+        <Link
+          href="/dashboard"
+          onClick={() => controlsRef.current?.stop()}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-700 text-xs font-semibold text-gray-300 transition-colors"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+          </svg>
+          Dashboard
+        </Link>
+        <h1 className="text-xl font-bold">Barcode Scanner</h1>
+        <span className="w-[88px]" />
+      </div>
 
       <div className="flex rounded-full overflow-hidden border border-gray-700 w-full max-w-xs">
         <button
