@@ -1,4 +1,4 @@
-const CACHE = 'mini-store-v1'
+const CACHE = 'mini-store-v2'
 const OFFLINE_URLS = ['/', '/scan', '/inventory', '/dashboard', '/reports']
 
 self.addEventListener('install', (event) => {
