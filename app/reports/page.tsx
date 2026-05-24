@@ -76,6 +76,7 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [syncMsg, setSyncMsg] = useState('')
+  const [syncErr, setSyncErr] = useState(false)
   const [clearing, setClearing] = useState(false)
   const [expandedCats, setExpandedCats] = useState<Record<string, boolean>>({})
 
@@ -87,10 +88,10 @@ export default function ReportsPage() {
         setData(await r.json())
       } else {
         const j = await r.json().catch(() => ({}))
-        setSyncMsg(`Failed to load reports: ${j.error ?? r.statusText}`)
+        setSyncErr(true); setSyncMsg(`Failed to load reports: ${j.error ?? r.statusText}`)
       }
     } catch (e) {
-      setSyncMsg(`Failed to load reports: ${e instanceof Error ? e.message : 'network error'}`)
+      setSyncErr(true); setSyncMsg(`Failed to load reports: ${e instanceof Error ? e.message : 'network error'}`)
     } finally {
       setLoading(false)
     }
@@ -100,11 +101,20 @@ export default function ReportsPage() {
 
   async function syncSheets() {
     setSyncing(true)
-    setSyncMsg('')
+    setSyncMsg(''); setSyncErr(false)
     try {
       const r = await fetch('/api/sync-sheets', { method: 'POST' })
-      const j = await r.json()
-      setSyncMsg(r.ok ? `Synced ${j.synced} rows to Google Sheets` : j.error)
+      const j = await r.json().catch(() => ({}))
+      if (r.ok) {
+        const extra = j.credit_tx != null ? ` (${j.credit_tx} credit, ${j.customers ?? 0} customers)` : ''
+        setSyncMsg(`Synced ${j.synced} rows to Google Sheets${extra}`)
+      } else {
+        setSyncErr(true)
+        setSyncMsg(j.error ?? `Sync failed (${r.status})`)
+      }
+    } catch (e) {
+      setSyncErr(true)
+      setSyncMsg(`Sync failed: ${e instanceof Error ? e.message : 'network error'}`)
     } finally {
       setSyncing(false)
     }
@@ -113,7 +123,7 @@ export default function ReportsPage() {
   async function clearTransactions() {
     if (!confirm('Delete ALL transactions? This cannot be undone.')) return
     setClearing(true)
-    setSyncMsg('')
+    setSyncMsg(''); setSyncErr(false)
     try {
       const r = await fetch('/api/transactions', { method: 'DELETE' })
       const j = await r.json().catch(() => ({}))
@@ -127,9 +137,11 @@ export default function ReportsPage() {
         setSyncMsg('All transactions cleared')
         await load()
       } else {
+        setSyncErr(true)
         setSyncMsg(j.error ?? `Failed to clear transactions (${r.status})`)
       }
     } catch (e) {
+      setSyncErr(true)
       setSyncMsg(`Failed to clear transactions: ${e instanceof Error ? e.message : 'network error'}`)
     } finally {
       setClearing(false)
@@ -201,7 +213,13 @@ export default function ReportsPage() {
         </div>
 
         {syncMsg && (
-          <div style={{ marginBottom: '20px', padding: '12px 16px', background: '#14532d30', border: `1px solid #16a34a50`, borderRadius: '10px', fontSize: '13px', color: S.green }}>
+          <div style={{
+            marginBottom: '20px', padding: '12px 16px',
+            background: syncErr ? '#7f1d1d30' : '#14532d30',
+            border: `1px solid ${syncErr ? '#dc262650' : '#16a34a50'}`,
+            borderRadius: '10px', fontSize: '13px',
+            color: syncErr ? S.red : S.green,
+          }}>
             {syncMsg}
           </div>
         )}

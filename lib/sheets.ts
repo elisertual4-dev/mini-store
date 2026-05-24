@@ -32,10 +32,27 @@ export async function appendToNamedSheet(sheetName: string, values: (string | nu
   })
 }
 
+async function ensureSheetExists(
+  sheets: ReturnType<typeof google.sheets>,
+  spreadsheetId: string,
+  sheetName: string
+) {
+  const meta = await sheets.spreadsheets.get({ spreadsheetId, fields: 'sheets.properties' })
+  const exists = meta.data.sheets?.some(s => s.properties?.title === sheetName)
+  if (exists) return
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: {
+      requests: [{ addSheet: { properties: { title: sheetName } } }],
+    },
+  })
+}
+
 export async function clearAndWriteSheet(sheetName: string, values: (string | number | boolean)[][]) {
   const auth = getAuth()
   const sheets = google.sheets({ version: 'v4', auth })
   const spreadsheetId = process.env.GOOGLE_SHEET_ID!
+  await ensureSheetExists(sheets, spreadsheetId, sheetName)
   const range = `'${sheetName}'!A1:Z10000`
   await sheets.spreadsheets.values.clear({ spreadsheetId, range })
   await sheets.spreadsheets.values.update({
