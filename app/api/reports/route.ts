@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
 
   const { data: txs, error } = await supabase
     .from('transactions')
-    .select('*, products(name, category, original_price)')
+    .select('*, original_price_at_sale, products(name, category)')
     .gte('created_at', fromDate.toISOString())
     .lte('created_at', toDate.toISOString())
     .order('created_at')
@@ -44,8 +44,8 @@ export async function GET(req: NextRequest) {
   }> = {}
 
   for (const t of txs ?? []) {
-    const prod = t.products as { name: string; category: string | null; original_price: number } | null
-    const origCost = (prod?.original_price ?? 0) * (t.qty ?? 0)
+    const prod = t.products as { name: string; category: string | null } | null
+    const origCost = Number(t.original_price_at_sale ?? 0) * (t.qty ?? 0)
     const profit = t.total - origCost
 
     const key = bucketKey(t.created_at, period)
