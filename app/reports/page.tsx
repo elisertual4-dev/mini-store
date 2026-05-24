@@ -88,6 +88,9 @@ export default function ReportsPage() {
   const [to, setTo] = useState(today)
   const [period, setPeriod] = useState<Period>('day')
   const [data, setData] = useState<ReportData | null>(null)
+  const [dailyDate, setDailyDate] = useState<string>(phToday())
+  const [dailyRevenue, setDailyRevenue] = useState<{ selling: number; original: number; revenue: number; count: number } | null>(null)
+  const [dailyLoading, setDailyLoading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [syncMsg, setSyncMsg] = useState('')
@@ -145,6 +148,26 @@ export default function ReportsPage() {
     syncSheets({ silent: true })
   }, [data, loading, syncSheets])
 
+  // Daily revenue (single picked day, independent of main range)
+  useEffect(() => {
+    let cancelled = false
+    setDailyLoading(true)
+    fetch(`/api/reports?from=${dailyDate}&to=${dailyDate}&period=day&t=${Date.now()}`, { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : Promise.reject(r.statusText))
+      .then((d: ReportData) => {
+        if (cancelled) return
+        const row = d.daily_sales[0]
+        if (row) {
+          setDailyRevenue({ selling: row.total, original: row.original_total, revenue: row.total - row.original_total, count: row.count })
+        } else {
+          setDailyRevenue({ selling: 0, original: 0, revenue: 0, count: 0 })
+        }
+      })
+      .catch(() => { if (!cancelled) setDailyRevenue(null) })
+      .finally(() => { if (!cancelled) setDailyLoading(false) })
+    return () => { cancelled = true }
+  }, [dailyDate, data])
+
   async function clearTransactions() {
     if (!confirm('Delete ALL transactions? This cannot be undone.')) return
     setClearing(true)
@@ -182,7 +205,10 @@ export default function ReportsPage() {
       <style>{`
         .rp-wrap { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; padding: 32px 24px; }
         .rp-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 36px; gap: 16px; flex-wrap: wrap; }
-        .rp-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 32px; }
+        .rp-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 32px; }
+        @media (max-width: 1024px) {
+          .rp-summary { grid-template-columns: repeat(2, 1fr); }
+        }
         .rp-h1 { font-family: 'Bebas Neue', cursive; font-size: 36px; letter-spacing: 4px; color: ${S.amber}; margin: 0; }
         .rp-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
         @media (max-width: 768px) {
@@ -263,6 +289,40 @@ export default function ReportsPage() {
               </span>
             </div>
           ))}
+
+          {/* Daily Revenue with date picker */}
+          <div style={{
+            background: S.surface, border: `1px solid ${S.border}`,
+            borderTop: `2px solid ${S.green}`, borderRadius: '14px', padding: '20px',
+            display: 'flex', flexDirection: 'column', gap: '6px',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '4px' }}>
+              <p style={{ fontSize: '10px', letterSpacing: '2px', color: S.muted, fontWeight: 700 }}>DAILY REVENUE</p>
+              <input
+                type="date"
+                value={dailyDate}
+                max={phToday()}
+                onChange={e => setDailyDate(e.target.value)}
+                style={{
+                  background: S.bg, border: `1px solid ${S.border}`,
+                  borderRadius: '6px', color: S.text,
+                  padding: '4px 8px', fontSize: '11px', fontFamily: 'inherit',
+                }}
+              />
+            </div>
+            <span style={{
+              fontFamily: "'Bebas Neue', cursive", fontSize: '36px',
+              color: dailyLoading ? S.muted : (dailyRevenue && dailyRevenue.revenue < 0 ? S.red : S.green),
+              lineHeight: 1,
+            }}>
+              {dailyLoading || !dailyRevenue ? '—' : fmt(dailyRevenue.revenue)}
+            </span>
+            {dailyRevenue && !dailyLoading && (
+              <p style={{ fontSize: '10px', color: S.muted, letterSpacing: '1px' }}>
+                {dailyRevenue.count} tx · {fmt(dailyRevenue.selling)} sold
+              </p>
+            )}
+          </div>
         </div>
 
         {/* Period Toggle */}
