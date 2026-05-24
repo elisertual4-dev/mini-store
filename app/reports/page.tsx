@@ -23,7 +23,7 @@ type CreditsSummary = {
   by_customer: CreditCustomer[]
   by_day: CreditDay[]
 }
-type Period = 'day' | 'month' | 'year'
+type Period = 'day' | 'week' | 'month' | 'year'
 type ReportData = {
   period: Period
   daily_sales: DailySale[]
@@ -59,6 +59,12 @@ function fmtPeriod(d: string, p: Period) {
     const [y, m] = d.split('-')
     const date = new Date(Number(y), Number(m) - 1, 1)
     return date.toLocaleDateString('en-PH', { month: 'short', year: 'numeric' })
+  }
+  if (p === 'week') {
+    // Format YYYY-Www -> "W21 '26"
+    const m = d.match(/^(\d{4})-W(\d{2})$/)
+    if (!m) return d
+    return `W${m[2]} '${m[1].slice(2)}`
   }
   return fmtDate(d)
 }
@@ -244,6 +250,7 @@ export default function ReportsPage() {
         <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
           {([
             { id: 'day', label: 'DAILY' },
+            { id: 'week', label: 'WEEKLY' },
             { id: 'month', label: 'MONTHLY' },
             { id: 'year', label: 'YEARLY' },
           ] as { id: Period; label: string }[]).map(opt => (
@@ -272,7 +279,7 @@ export default function ReportsPage() {
         {/* Sales Line Chart */}
         <div style={{ background: S.surface, border: `1px solid ${S.border}`, borderRadius: '16px', padding: '24px', marginBottom: '24px' }}>
           <p style={{ fontSize: '11px', letterSpacing: '2px', color: S.muted, marginBottom: '20px', fontWeight: 700 }}>
-            {period === 'year' ? 'YEARLY SALES' : period === 'month' ? 'MONTHLY SALES' : 'DAILY SALES'}
+            {period === 'year' ? 'YEARLY SALES' : period === 'month' ? 'MONTHLY SALES' : period === 'week' ? 'WEEKLY SALES' : 'DAILY SALES'}
           </p>
           {loading ? (
             <div style={{ height: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: S.muted }}>Loading…</div>
@@ -308,7 +315,7 @@ export default function ReportsPage() {
         <div style={{ background: S.surface, border: `1px solid ${S.border}`, borderRadius: '16px', padding: '24px', marginBottom: '24px' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '20px' }}>
             <p style={{ fontSize: '11px', letterSpacing: '2px', color: S.muted, fontWeight: 700 }}>REVENUE PER CATEGORY</p>
-            <p style={{ fontSize: '10px', letterSpacing: '1px', color: S.muted }}>{period === 'year' ? 'YEARLY' : period === 'month' ? 'MONTHLY' : 'DAILY'} VIEW</p>
+            <p style={{ fontSize: '10px', letterSpacing: '1px', color: S.muted }}>{period === 'year' ? 'YEARLY' : period === 'month' ? 'MONTHLY' : period === 'week' ? 'WEEKLY' : 'DAILY'} VIEW</p>
           </div>
           {loading ? (
             <div style={{ height: '120px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: S.muted }}>Loading…</div>

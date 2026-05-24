@@ -6,11 +6,24 @@ export const dynamic = 'force-dynamic'
 export const fetchCache = 'force-no-store'
 export const revalidate = 0
 
-type Period = 'day' | 'month' | 'year'
+type Period = 'day' | 'week' | 'month' | 'year'
+
+// ISO 8601 week (year + week number). Week starts Monday.
+function isoWeekKey(iso: string): string {
+  const d = new Date(iso)
+  // UTC date stripped of time
+  const target = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()))
+  const dayNum = target.getUTCDay() || 7
+  target.setUTCDate(target.getUTCDate() + 4 - dayNum)
+  const yearStart = new Date(Date.UTC(target.getUTCFullYear(), 0, 1))
+  const weekNo = Math.ceil((((target.getTime() - yearStart.getTime()) / 86400000) + 1) / 7)
+  return `${target.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`
+}
 
 function bucketKey(iso: string, p: Period) {
   if (p === 'year') return iso.slice(0, 4)
   if (p === 'month') return iso.slice(0, 7)
+  if (p === 'week') return isoWeekKey(iso)
   return iso.split('T')[0]
 }
 
@@ -19,7 +32,7 @@ export async function GET(req: NextRequest) {
   const from = searchParams.get('from') ?? new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0]
   const to = searchParams.get('to') ?? new Date().toISOString().split('T')[0]
   const periodParam = (searchParams.get('period') ?? 'day') as Period
-  const period: Period = ['day', 'month', 'year'].includes(periodParam) ? periodParam : 'day'
+  const period: Period = ['day', 'week', 'month', 'year'].includes(periodParam) ? periodParam : 'day'
 
   const fromDate = new Date(from + 'T00:00:00')
   const toDate = new Date(to + 'T23:59:59')
