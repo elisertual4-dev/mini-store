@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import QRCode from 'react-qr-code'
+import { resizeImage } from '@/lib/resize-image'
 
 type CreatedProduct = {
   id: string
@@ -16,6 +17,7 @@ export default function NewProductPage() {
   const router = useRouter()
   const fileRef = useRef<HTMLInputElement>(null)
 
+  const [photoFile, setPhotoFile] = useState<File | null>(null)
   const [photoUrl, setPhotoUrl] = useState<string | null>(null)
   const [form, setForm] = useState({
     name: '',
@@ -30,7 +32,10 @@ export default function NewProductPage() {
 
   function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
-    if (file) setPhotoUrl(URL.createObjectURL(file))
+    if (file) {
+      setPhotoFile(file)
+      setPhotoUrl(URL.createObjectURL(file))
+    }
   }
 
   async function handleSubmit() {
@@ -42,6 +47,17 @@ export default function NewProductPage() {
         (Date.now() % 100000000).toString().padStart(8, '0') +
         Math.floor(Math.random() * 9999).toString().padStart(4, '0')
 
+      let image_url: string | null = null
+      if (photoFile) {
+        const resized = await resizeImage(photoFile)
+        const fd = new FormData()
+        fd.append('file', resized)
+        const uploadRes = await fetch('/api/upload-image', { method: 'POST', body: fd })
+        const uploadData = await uploadRes.json()
+        if (!uploadRes.ok) throw new Error(uploadData.error ?? `Upload failed (${uploadRes.status})`)
+        image_url = uploadData.url
+      }
+
       const res = await fetch('/api/products', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -52,6 +68,7 @@ export default function NewProductPage() {
           price: parseFloat(form.price),
           stock_qty: parseInt(form.stock_qty) || 0,
           low_stock_threshold: parseInt(form.low_stock_threshold) || 5,
+          image_url,
         }),
       })
       const text = await res.text()
@@ -160,7 +177,7 @@ export default function NewProductPage() {
           <div className="relative">
             <img src={photoUrl} alt="Product" className="w-full rounded-xl object-cover max-h-52" />
             <button
-              onClick={() => { setPhotoUrl(null); if (fileRef.current) fileRef.current.value = '' }}
+              onClick={() => { setPhotoFile(null); setPhotoUrl(null); if (fileRef.current) fileRef.current.value = '' }}
               className="absolute top-2 right-2 bg-black/60 text-white rounded-full w-7 h-7 flex items-center justify-center text-sm font-bold hover:bg-black/80"
             >✕</button>
             <button
