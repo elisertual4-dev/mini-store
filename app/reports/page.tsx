@@ -129,25 +129,42 @@ export default function ReportsPage() {
 
   return (
     <main style={{ background: S.bg, minHeight: '100vh', fontFamily: "'Syne', sans-serif", color: S.text }}>
+      <style>{`
+        .rp-wrap { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; padding: 32px 24px; }
+        .rp-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 36px; gap: 16px; flex-wrap: wrap; }
+        .rp-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 32px; }
+        .rp-h1 { font-family: 'Bebas Neue', cursive; font-size: 36px; letter-spacing: 4px; color: ${S.amber}; margin: 0; }
+        .rp-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+        @media (max-width: 768px) {
+          .rp-wrap { padding: 16px 12px 80px; }
+          .rp-summary { grid-template-columns: 1fr; gap: 10px; }
+          .rp-h1 { font-size: 26px; letter-spacing: 2px; }
+          .rp-toolbar { width: 100%; justify-content: flex-start; }
+          .rp-header { margin-bottom: 20px; }
+        }
+        @media (max-width: 480px) {
+          .rp-toolbar input[type="date"] { flex: 1 1 45%; min-width: 0; }
+        }
+      `}</style>
       <div style={{
         position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0,
         backgroundImage: `linear-gradient(${S.border} 1px, transparent 1px), linear-gradient(90deg, ${S.border} 1px, transparent 1px)`,
         backgroundSize: '40px 40px', opacity: 0.2,
       }} />
 
-      <div style={{ position: 'relative', zIndex: 1, maxWidth: '1200px', margin: '0 auto', padding: '32px 24px' }}>
+      <div className="rp-wrap">
 
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '36px' }}>
+        <div className="rp-header">
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '4px' }}>
               <Link href="/dashboard" style={{ color: S.muted, textDecoration: 'none', fontSize: '13px' }}>← Dashboard</Link>
             </div>
-            <h1 style={{ fontFamily: "'Bebas Neue', cursive", fontSize: '36px', letterSpacing: '4px', color: S.amber, margin: 0 }}>
+            <h1 className="rp-h1">
               REPORTS
             </h1>
           </div>
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <div className="rp-toolbar">
             <input type="date" value={from} onChange={e => setFrom(e.target.value)}
               style={{ background: S.surface, border: `1px solid ${S.border}`, borderRadius: '8px', color: S.text, padding: '8px 12px', fontSize: '13px', fontFamily: 'inherit' }} />
             <span style={{ color: S.muted, fontSize: '12px' }}>to</span>
@@ -177,7 +194,7 @@ export default function ReportsPage() {
         )}
 
         {/* Summary row */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '32px' }}>
+        <div className="rp-summary">
           {[
             { label: 'TOTAL SALES (ORIGINAL PRICE)', value: fmt(totalSalesOriginal), accent: S.amber },
             { label: 'TOTAL SALES (SELLING PRICE)', value: fmt(totalSalesSelling), accent: S.green },

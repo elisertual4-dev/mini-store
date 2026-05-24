@@ -239,7 +239,7 @@ export default function DashboardPage() {
   const COLORS = [C.teal, C.amber, C.violet, C.coral, C.textSub]
 
   return (
-    <div style={{ display: 'flex', height: '100vh', background: C.bg, fontFamily: "'Outfit', 'Segoe UI', sans-serif", color: C.text, overflow: 'hidden' }}>
+    <div className="ds-root" style={{ display: 'flex', height: '100vh', background: C.bg, fontFamily: "'Outfit', 'Segoe UI', sans-serif", color: C.text, overflow: 'hidden' }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -256,10 +256,69 @@ export default function DashboardPage() {
         .anim5 { animation-delay: 0.25s; opacity: 0; }
         .anim6 { animation-delay: 0.3s; opacity: 0; }
         .tr-row:hover td { background: ${C.cardHover} !important; }
+
+        .ds-mobile-topbar { display: none; }
+        .ds-main { padding: 32px 28px; }
+        .ds-stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 22px; }
+        .ds-charts-row { display: grid; grid-template-columns: 1fr 300px; gap: 14px; margin-bottom: 22px; }
+        .ds-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; gap: 12px; flex-wrap: wrap; }
+        .ds-recent-table { font-size: 13px; }
+        .ds-recent-table th, .ds-recent-table td { white-space: nowrap; }
+        .ds-credits-table th, .ds-credits-table td { white-space: nowrap; }
+
+        @media (max-width: 1024px) {
+          .ds-stat-grid { grid-template-columns: repeat(2, 1fr); }
+          .ds-charts-row { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 768px) {
+          .ds-root { flex-direction: column; height: auto; min-height: 100vh; overflow: visible !important; }
+          .ds-sidebar { display: none !important; }
+          .ds-mobile-topbar {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 14px 16px; background: ${C.sidebar};
+            border-bottom: 1px solid ${C.border}; position: sticky; top: 0; z-index: 50;
+          }
+          .ds-mobile-nav {
+            position: fixed; bottom: 0; left: 0; right: 0; z-index: 50;
+            display: flex; justify-content: space-around;
+            background: ${C.sidebar}; border-top: 1px solid ${C.border};
+            padding: 8px 0 12px;
+          }
+          .ds-mobile-nav a {
+            flex: 1; display: flex; flex-direction: column; align-items: center;
+            gap: 4px; text-decoration: none; padding: 6px 4px;
+            font-size: 10px; font-weight: 600; letter-spacing: 1px;
+          }
+          .ds-main { padding: 16px 14px 90px; overflow: visible; }
+          .ds-stat-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+          .ds-header h1 { font-size: 18px !important; }
+          .ds-header p { font-size: 11px !important; }
+          .ds-card-pad { padding: 16px !important; }
+        }
+        @media (max-width: 420px) {
+          .ds-stat-grid { grid-template-columns: 1fr; }
+        }
       `}</style>
 
+      {/* Mobile top bar */}
+      <div className="ds-mobile-topbar">
+        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: '12px', letterSpacing: '3px', color: C.teal, fontWeight: 600 }}>
+          MINI STORE
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <span style={{
+            width: '7px', height: '7px', borderRadius: '50%',
+            background: live ? C.teal : C.muted,
+            animation: live ? 'tealPing 2s ease-in-out infinite' : 'none',
+          }} />
+          <span style={{ fontSize: '10px', color: live ? C.teal : C.muted, fontWeight: 600, letterSpacing: '1px' }}>
+            {live ? 'LIVE' : 'OFFLINE'}
+          </span>
+        </div>
+      </div>
+
       {/* ── Sidebar ── */}
-      <aside style={{
+      <aside className="ds-sidebar" style={{
         width: '220px', flexShrink: 0, background: C.sidebar,
         borderRight: `1px solid ${C.border}`,
         display: 'flex', flexDirection: 'column', padding: '28px 16px 24px',
@@ -299,10 +358,10 @@ export default function DashboardPage() {
       </aside>
 
       {/* ── Main ── */}
-      <main style={{ flex: 1, overflow: 'auto', padding: '32px 28px' }}>
+      <main className="ds-main" style={{ flex: 1, overflow: 'auto' }}>
 
         {/* Header */}
-        <div className="anim anim1" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '28px' }}>
+        <div className="anim anim1 ds-header">
           <div>
             <h1 style={{ fontSize: '22px', fontWeight: 700, letterSpacing: '-0.3px' }}>Dashboard</h1>
             <p style={{ fontSize: '13px', color: C.textSub, marginTop: '2px' }}>
@@ -323,7 +382,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Metric cards */}
-        <div className="anim anim2" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px', marginBottom: '22px' }}>
+        <div className="anim anim2 ds-stat-grid">
           <StatCard
             label="Today's Sales" loading={loading}
             value={metrics ? `₱${metrics.today_sales.toLocaleString('en-PH', { minimumFractionDigits: 2 })}` : '—'}
@@ -352,7 +411,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Charts + Top Products row */}
-        <div className="anim anim3" style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: '14px', marginBottom: '22px' }}>
+        <div className="anim anim3 ds-charts-row">
 
           {/* Sales chart */}
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: '14px', padding: '22px 24px' }}>
@@ -613,6 +672,18 @@ export default function DashboardPage() {
         </div>
 
       </main>
+
+      {/* Mobile bottom nav */}
+      <nav className="ds-mobile-nav">
+        {NAV.map(n => {
+          return (
+            <Link key={n.href} href={n.href} style={{ color: C.textSub }}>
+              <span style={{ fontSize: '18px' }}>{n.icon}</span>
+              <span>{n.label.toUpperCase()}</span>
+            </Link>
+          )
+        })}
+      </nav>
     </div>
   )
 }

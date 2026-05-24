@@ -285,11 +285,11 @@ export default function InventoryPage() {
   const lowStockCount = products.filter(p => p.is_low_stock).length
 
   return (
-    <main className="min-h-screen bg-gray-950 text-white p-4 sm:p-6 max-w-6xl mx-auto">
+    <main className="min-h-screen bg-gray-950 text-white p-3 sm:p-6 max-w-6xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6 mt-2">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5 sm:mb-6 mt-2">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Inventory</h1>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Inventory</h1>
           <div className="flex items-center gap-3 mt-1">
             <p className="text-sm text-gray-400">{products.length} products</p>
             {lowStockCount > 0 && (
@@ -303,13 +303,13 @@ export default function InventoryPage() {
         <div className="flex gap-2">
           <Link
             href="/inventory/restock"
-            className="px-4 py-2 bg-green-600 hover:bg-green-500 text-white rounded-xl text-sm font-bold transition-colors"
+            className="flex-1 sm:flex-initial text-center px-3 sm:px-4 py-2 bg-green-600 hover:bg-green-500 text-white rounded-xl text-xs sm:text-sm font-bold transition-colors"
           >
             + Restock
           </Link>
           <button
             onClick={() => setShowAdd(true)}
-            className="px-4 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-white rounded-xl text-sm font-bold transition-colors"
+            className="flex-1 sm:flex-initial px-3 sm:px-4 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-white rounded-xl text-xs sm:text-sm font-bold transition-colors"
           >
             + Add Product
           </button>
@@ -364,17 +364,17 @@ export default function InventoryPage() {
 
       {/* Table */}
       <div className="overflow-x-auto rounded-2xl border border-gray-800 bg-gray-900">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm min-w-[640px]">
           <thead className="border-b border-gray-800">
             <tr>
               <th className="px-3 py-3 w-14" />
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Product</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Barcode</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Category</th>
-              <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Price</th>
-              <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Stock</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
-              <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
+              <th className="px-3 sm:px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Product</th>
+              <th className="hidden md:table-cell px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Barcode</th>
+              <th className="hidden sm:table-cell px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Category</th>
+              <th className="px-3 sm:px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Price</th>
+              <th className="px-3 sm:px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Stock</th>
+              <th className="hidden md:table-cell px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+              <th className="px-3 sm:px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-800">
@@ -424,12 +424,12 @@ export default function InventoryPage() {
                     )}
                   </button>
                 </td>
-                <td className="px-4 py-3 font-medium text-white">{p.name}</td>
-                <td className="px-4 py-3 text-gray-500 font-mono text-xs">{p.barcode || '—'}</td>
-                <td className="px-4 py-3 text-gray-400">{p.category || '—'}</td>
-                <td className="px-4 py-3 text-right text-gray-300">₱{p.price.toFixed(2)}</td>
-                <td className="px-4 py-3 text-right font-bold text-white">{p.stock_qty}</td>
-                <td className="px-4 py-3">
+                <td className="px-3 sm:px-4 py-3 font-medium text-white">{p.name}</td>
+                <td className="hidden md:table-cell px-4 py-3 text-gray-500 font-mono text-xs">{p.barcode || '—'}</td>
+                <td className="hidden sm:table-cell px-4 py-3 text-gray-400">{p.category || '—'}</td>
+                <td className="px-3 sm:px-4 py-3 text-right text-gray-300">₱{p.price.toFixed(2)}</td>
+                <td className={`px-3 sm:px-4 py-3 text-right font-bold ${p.is_low_stock ? 'text-amber-400' : 'text-white'}`}>{p.stock_qty}</td>
+                <td className="hidden md:table-cell px-4 py-3">
                   {p.is_low_stock ? (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-500/15 text-amber-400 border border-amber-500/20">
                       <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
@@ -442,8 +442,8 @@ export default function InventoryPage() {
                     </span>
                   )}
                 </td>
-                <td className="px-4 py-3 text-right">
-                  <div className="flex gap-1 justify-end">
+                <td className="px-3 sm:px-4 py-3 text-right">
+                  <div className="flex gap-1 justify-end flex-wrap">
                     <button
                       onClick={() => { setEditProduct(p); setAdjustQty(0); setAdjustNote('') }}
                       className="px-2.5 py-1 text-xs bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 rounded-lg font-medium transition-colors"
