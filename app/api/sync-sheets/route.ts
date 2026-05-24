@@ -19,7 +19,7 @@ export async function POST() {
 
   // --- Sheet 1: Daily Sales ---
   const salesRows: (string | number)[][] = [
-    ['Date', 'Product', 'Category', 'Qty', 'Unit Cost (₱)', 'Total (₱)', 'Revenue (₱)', 'Payment', 'Customer', 'Paid', 'Paid At'],
+    ['Date', 'Product', 'Category', 'Qty', 'Unit Cost (₱)', 'Selling Price (₱)', 'Revenue (₱)', 'Payment', 'Customer', 'Paid', 'Paid At'],
     ...txs.map(t => {
       const prod = t.products as { name: string; category: string | null } | null
       const origCost = Number(t.original_price_at_sale ?? 0) * (t.qty ?? 0)
