@@ -40,10 +40,23 @@ export async function PATCH(req: NextRequest) {
   }
 }
 
+export async function DELETE(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url)
+    const id = searchParams.get('id')
+    if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+    const { error } = await supabase.from('products').delete().eq('id', id)
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ success: true })
+  } catch (e: unknown) {
+    return NextResponse.json({ error: (e as Error).message }, { status: 500 })
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { name, barcode, price, category, stock_qty, low_stock_threshold, image_url } = body
+    const { name, barcode, price, original_price, category, stock_qty, low_stock_threshold, image_url } = body
 
     if (!name || price == null) {
       return NextResponse.json({ error: 'name and price required' }, { status: 400 })
@@ -51,7 +64,7 @@ export async function POST(req: NextRequest) {
 
     const { data, error } = await supabase
       .from('products')
-      .insert({ name, barcode, price, category, stock_qty: stock_qty ?? 0, low_stock_threshold: low_stock_threshold ?? 5, image_url: image_url ?? null })
+      .insert({ name, barcode, price, original_price: original_price ?? 0, category, stock_qty: stock_qty ?? 0, low_stock_threshold: low_stock_threshold ?? 5, image_url: image_url ?? null })
       .select()
       .single()
 

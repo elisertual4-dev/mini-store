@@ -34,5 +34,14 @@ export async function GET() {
 
   const lowStockCount = (products ?? []).filter(p => p.stock_qty <= p.low_stock_threshold).length
 
-  return NextResponse.json({ today_sales: todaySales, today_tx_count: todayTxCount, total_items_sold: totalItemsSold, top_product: topProduct, low_stock_count: lowStockCount })
+  return NextResponse.json(
+    { today_sales: todaySales, today_tx_count: todayTxCount, total_items_sold: totalItemsSold, top_product: topProduct, low_stock_count: lowStockCount },
+    {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+        'CDN-Cache-Control': 'no-store',
+        'Vercel-CDN-Cache-Control': 'no-store',
+      },
+    }
+  )
 }

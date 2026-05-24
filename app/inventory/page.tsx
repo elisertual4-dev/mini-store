@@ -34,6 +34,8 @@ export default function InventoryPage() {
   const [addPhotoFile, setAddPhotoFile] = useState<File | null>(null)
   const [addPhotoPreview, setAddPhotoPreview] = useState<string | null>(null)
   const addFileRef = useRef<HTMLInputElement>(null)
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false)
+  const categoryComboRef = useRef<HTMLDivElement>(null)
 
   const [historyProduct, setHistoryProduct] = useState<StockLevel | null>(null)
   const [logs, setLogs] = useState<InventoryLog[]>([])
@@ -42,6 +44,9 @@ export default function InventoryPage() {
   const [printProduct, setPrintProduct] = useState<StockLevel | null>(null)
   const [printBarcode, setPrintBarcode] = useState<string>('')
   const [savingBarcode, setSavingBarcode] = useState(false)
+
+  const [deleteProduct, setDeleteProduct] = useState<StockLevel | null>(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
 
   const [uploadingImageFor, setUploadingImageFor] = useState<string | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
@@ -91,6 +96,17 @@ export default function InventoryPage() {
   }, [])
 
   useEffect(() => { fetchProducts() }, [fetchProducts])
+
+  useEffect(() => {
+    if (!showCategoryDropdown) return
+    function handleClickOutside(e: MouseEvent) {
+      if (categoryComboRef.current && !categoryComboRef.current.contains(e.target as Node)) {
+        setShowCategoryDropdown(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showCategoryDropdown])
 
   const categories = Array.from(new Set(products.map(p => p.category).filter(Boolean))) as string[]
 
@@ -156,6 +172,18 @@ export default function InventoryPage() {
       await fetchProducts()
     } finally {
       setAddLoading(false)
+    }
+  }
+
+  async function handleDelete() {
+    if (!deleteProduct) return
+    setDeleteLoading(true)
+    try {
+      await fetch(`/api/products?id=${deleteProduct.id}`, { method: 'DELETE' })
+      setDeleteProduct(null)
+      await fetchProducts()
+    } finally {
+      setDeleteLoading(false)
     }
   }
 
@@ -376,6 +404,12 @@ export default function InventoryPage() {
                     >
                       Print
                     </button>
+                    <button
+                      onClick={() => setDeleteProduct(p)}
+                      className="px-2.5 py-1 text-xs bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 rounded-lg font-medium transition-colors"
+                    >
+                      Delete
+                    </button>
                   </div>
                 </td>
               </tr>
@@ -504,15 +538,44 @@ export default function InventoryPage() {
                     className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white font-mono focus:outline-none focus:ring-2 focus:ring-green-500"
                   />
                 </div>
-                <div>
+                <div className="relative" ref={categoryComboRef}>
                   <label className="block text-xs font-medium text-gray-400 mb-1">Category</label>
                   <input
                     type="text"
                     value={addForm.category}
-                    onChange={e => setAddForm(f => ({ ...f, category: e.target.value }))}
+                    onChange={e => { setAddForm(f => ({ ...f, category: e.target.value })); setShowCategoryDropdown(true) }}
+                    onFocus={() => setShowCategoryDropdown(true)}
                     className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500"
-                    placeholder="e.g. Beverages"
+                    placeholder="Select or type new…"
+                    autoComplete="off"
                   />
+                  {showCategoryDropdown && categories.length > 0 && (() => {
+                    const q = addForm.category.toLowerCase().trim()
+                    const matches = q ? categories.filter(c => c.toLowerCase().includes(q)) : categories
+                    const exactMatch = categories.some(c => c.toLowerCase() === q)
+                    const showNew = q.length > 0 && !exactMatch
+                    if (matches.length === 0 && !showNew) return null
+                    return (
+                      <div className="absolute z-50 mt-1 w-full bg-gray-800 border border-gray-700 rounded-xl shadow-xl overflow-hidden max-h-48 overflow-y-auto">
+                        {matches.map(c => (
+                          <button
+                            key={c}
+                            type="button"
+                            onMouseDown={() => { setAddForm(f => ({ ...f, category: c })); setShowCategoryDropdown(false) }}
+                            className="w-full text-left px-3 py-2.5 text-sm text-gray-200 hover:bg-gray-700 transition-colors"
+                          >
+                            {c}
+                          </button>
+                        ))}
+                        {showNew && (
+                          <div className="px-3 py-2 text-xs text-gray-500 border-t border-gray-700 flex items-center gap-1.5">
+                            <span className="bg-green-500/15 text-green-400 border border-green-500/20 rounded px-1.5 py-0.5 font-medium">New</span>
+                            <span className="text-gray-300">"{addForm.category}" will be saved as new category</span>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-400 mb-1">Price (₱) *</label>
@@ -635,6 +698,44 @@ export default function InventoryPage() {
             </div>
           </div>
         </>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteProduct && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-40 p-4">
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-500/15 border border-red-500/20 flex items-center justify-center flex-shrink-0">
+                <svg className="w-5 h-5 text-red-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                </svg>
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-white">Delete Product</h2>
+                <p className="text-xs text-gray-500 mt-0.5">This action cannot be undone</p>
+              </div>
+            </div>
+            <p className="text-sm text-gray-300 mb-6">
+              Are you sure you want to delete <strong className="text-white">{deleteProduct.name}</strong> from inventory?
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setDeleteProduct(null)}
+                disabled={deleteLoading}
+                className="flex-1 px-4 py-2.5 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-xl text-sm font-medium transition-colors disabled:opacity-40"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleteLoading}
+                className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-500 text-white rounded-xl text-sm font-bold disabled:opacity-40 transition-colors"
+              >
+                {deleteLoading ? 'Deleting…' : 'Yes, Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Stock History Drawer */}

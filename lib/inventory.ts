@@ -5,6 +5,7 @@ export type StockLevel = {
   barcode: string | null
   name: string
   price: number
+  original_price: number
   stock_qty: number
   low_stock_threshold: number
   category: string | null

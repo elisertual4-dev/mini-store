@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import QRCode from 'react-qr-code'
 import { resizeImage } from '@/lib/resize-image'
@@ -22,6 +22,7 @@ export default function NewProductPage() {
   const [form, setForm] = useState({
     name: '',
     category: '',
+    original_price: '',
     price: '',
     stock_qty: '0',
     low_stock_threshold: '5',
@@ -29,6 +30,32 @@ export default function NewProductPage() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [created, setCreated] = useState<CreatedProduct | null>(null)
+
+  const [categories, setCategories] = useState<string[]>([])
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false)
+  const categoryComboRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    fetch('/api/inventory')
+      .then(r => r.json())
+      .then((data: { category: string | null }[]) => {
+        if (!Array.isArray(data)) return
+        const uniq = Array.from(new Set(data.map(p => p.category).filter(Boolean))) as string[]
+        setCategories(uniq.sort())
+      })
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    if (!showCategoryDropdown) return
+    function handleClickOutside(e: MouseEvent) {
+      if (categoryComboRef.current && !categoryComboRef.current.contains(e.target as Node)) {
+        setShowCategoryDropdown(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showCategoryDropdown])
 
   function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -66,6 +93,7 @@ export default function NewProductPage() {
           barcode,
           category: form.category || null,
           price: parseFloat(form.price),
+          original_price: parseFloat(form.original_price) || 0,
           stock_qty: parseInt(form.stock_qty) || 0,
           low_stock_threshold: parseInt(form.low_stock_threshold) || 5,
           image_url,
@@ -213,28 +241,107 @@ export default function NewProductPage() {
           />
         </div>
 
-        <div>
+        <div className="relative" ref={categoryComboRef}>
           <label className="block text-xs font-medium text-gray-400 mb-1">Category</label>
           <input
             type="text"
             value={form.category}
-            onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
-            placeholder="e.g. Beverages"
+            onChange={e => { setForm(f => ({ ...f, category: e.target.value })); setShowCategoryDropdown(true) }}
+            onFocus={() => setShowCategoryDropdown(true)}
+            placeholder="Select or type new…"
+            autoComplete="off"
             className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
           />
+          {showCategoryDropdown && categories.length > 0 && (() => {
+            const q = form.category.toLowerCase().trim()
+            const matches = q ? categories.filter(c => c.toLowerCase().includes(q)) : categories
+            const exactMatch = categories.some(c => c.toLowerCase() === q)
+            const showNew = q.length > 0 && !exactMatch
+            if (matches.length === 0 && !showNew) return null
+            return (
+              <div className="absolute z-50 mt-1 w-full bg-gray-800 border border-gray-700 rounded-xl shadow-xl overflow-hidden max-h-48 overflow-y-auto">
+                {matches.map(c => (
+                  <button
+                    key={c}
+                    type="button"
+                    onMouseDown={() => { setForm(f => ({ ...f, category: c })); setShowCategoryDropdown(false) }}
+                    className="w-full text-left px-3 py-2.5 text-sm text-gray-200 hover:bg-gray-700 transition-colors"
+                  >
+                    {c}
+                  </button>
+                ))}
+                {showNew && (
+                  <div className="px-3 py-2 text-xs text-gray-500 border-t border-gray-700 flex items-center gap-1.5">
+                    <span className="bg-green-500/15 text-green-400 border border-green-500/20 rounded px-1.5 py-0.5 font-medium">New</span>
+                    <span className="text-gray-300">&ldquo;{form.category}&rdquo; will be saved as new category</span>
+                  </div>
+                )}
+              </div>
+            )
+          })()}
         </div>
 
-        <div>
-          <label className="block text-xs font-medium text-gray-400 mb-1">Price (₱) *</label>
-          <input
-            type="number"
-            min="0"
-            step="0.01"
-            value={form.price}
-            onChange={e => setForm(f => ({ ...f, price: e.target.value }))}
-            placeholder="0.00"
-            className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-          />
+        {/* Pricing block */}
+        <div className="rounded-xl border border-gray-700 bg-gray-800/50 p-3 flex flex-col gap-3">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Pricing</p>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1">Original Price (₱)</label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">₱</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.original_price}
+                  onChange={e => setForm(f => ({ ...f, original_price: e.target.value }))}
+                  placeholder="0.00"
+                  className="w-full bg-gray-900 border border-gray-700 rounded-xl pl-7 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1">Selling Price (₱) *</label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">₱</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.price}
+                  onChange={e => setForm(f => ({ ...f, price: e.target.value }))}
+                  placeholder="0.00"
+                  className="w-full bg-gray-900 border border-gray-700 rounded-xl pl-7 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Revenue computed display */}
+          {(() => {
+            const orig = parseFloat(form.original_price) || 0
+            const sell = parseFloat(form.price) || 0
+            const revenue = sell - orig
+            const hasValues = form.original_price !== '' || form.price !== ''
+            if (!hasValues) return null
+            return (
+              <div className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm ${
+                revenue > 0 ? 'bg-green-500/10 border border-green-500/20' :
+                revenue < 0 ? 'bg-red-500/10 border border-red-500/20' :
+                'bg-gray-700/50 border border-gray-700'
+              }`}>
+                <span className="text-gray-400 text-xs font-medium">Revenue per unit</span>
+                <span className={`font-bold text-sm ${
+                  revenue > 0 ? 'text-green-400' :
+                  revenue < 0 ? 'text-red-400' :
+                  'text-gray-400'
+                }`}>
+                  {revenue >= 0 ? '+' : ''}₱{revenue.toFixed(2)}
+                </span>
+              </div>
+            )
+          })()}
         </div>
 
         <div className="grid grid-cols-2 gap-3">
