@@ -91,6 +91,7 @@ export default function ReportsPage() {
   const [dailyDate, setDailyDate] = useState<string>(phToday())
   const [dailyRevenue, setDailyRevenue] = useState<{ selling: number; original: number; revenue: number; count: number } | null>(null)
   const [dailyLoading, setDailyLoading] = useState(false)
+  const dailyDateRef = useRef<HTMLInputElement>(null)
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [syncMsg, setSyncMsg] = useState('')
@@ -222,11 +223,10 @@ export default function ReportsPage() {
         @media (max-width: 480px) {
           .rp-toolbar input[type="date"] { flex: 1 1 45%; min-width: 0; }
         }
-        /* Visible calendar picker indicator on dark backgrounds */
+        /* Daily revenue card: hide native indicator (replaced by visible custom SVG button) */
         .rp-daily-date::-webkit-calendar-picker-indicator {
-          filter: invert(1) brightness(1.2) opacity(0.9);
-          cursor: pointer;
-          margin-left: 4px;
+          opacity: 0;
+          display: none;
         }
         .rp-toolbar input[type="date"]::-webkit-calendar-picker-indicator {
           filter: invert(1) brightness(1.2) opacity(0.9);
@@ -309,19 +309,42 @@ export default function ReportsPage() {
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '4px' }}>
               <p style={{ fontSize: '10px', letterSpacing: '2px', color: S.muted, fontWeight: 700 }}>DAILY REVENUE</p>
-              <input
-                type="date"
-                value={dailyDate}
-                max={phToday()}
-                onChange={e => setDailyDate(e.target.value)}
-                className="rp-daily-date"
-                style={{
-                  background: S.bg, border: `1px solid ${S.border}`,
-                  borderRadius: '6px', color: S.text,
-                  padding: '4px 8px', fontSize: '11px', fontFamily: 'inherit',
-                  colorScheme: 'dark',
+              <div
+                onClick={() => {
+                  const el = dailyDateRef.current
+                  if (!el) return
+                  if (typeof el.showPicker === 'function') el.showPicker()
+                  else el.focus()
                 }}
-              />
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                  background: S.bg, border: `1px solid ${S.green}60`,
+                  borderRadius: '8px', padding: '5px 10px', cursor: 'pointer',
+                  transition: 'border-color 0.15s, background 0.15s',
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = S.green }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = `${S.green}60` }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={S.green} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <rect x="3" y="4" width="18" height="18" rx="2" />
+                  <line x1="16" y1="2" x2="16" y2="6" />
+                  <line x1="8" y1="2" x2="8" y2="6" />
+                  <line x1="3" y1="10" x2="21" y2="10" />
+                </svg>
+                <input
+                  ref={dailyDateRef}
+                  type="date"
+                  value={dailyDate}
+                  max={phToday()}
+                  onChange={e => setDailyDate(e.target.value)}
+                  className="rp-daily-date"
+                  style={{
+                    background: 'transparent', border: 'none', color: S.text,
+                    padding: 0, fontSize: '12px', fontFamily: 'inherit',
+                    colorScheme: 'dark', outline: 'none',
+                  }}
+                />
+              </div>
             </div>
             <span style={{
               fontFamily: "'Bebas Neue', cursive", fontSize: '36px',
