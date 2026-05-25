@@ -436,7 +436,12 @@ export default function ReportsPage() {
             <div style={{ height: '120px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: S.muted }}>Loading…</div>
           ) : !data?.category_sales.length ? (
             <div style={{ height: '120px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: S.muted }}>No category sales for this period</div>
-          ) : (
+          ) : (() => {
+            const totalSales = data.category_sales.reduce((s, c) => s + c.total, 0)
+            const totalRevenue = data.category_sales.reduce((s, c) => s + c.revenue, 0)
+            const totalQty = data.category_sales.reduce((s, c) => s + c.qty, 0)
+            return (
+            <>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {data.category_sales.map((c, i) => {
                 const expanded = expandedCats[c.category] ?? false
@@ -460,10 +465,24 @@ export default function ReportsPage() {
                           {c.products.length} item{c.products.length !== 1 ? 's' : ''} · {c.qty} sold
                         </span>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <span style={{ fontFamily: "'Bebas Neue', cursive", fontSize: '22px', color: accent, letterSpacing: '1px' }}>
-                          {fmt(c.revenue)}
-                        </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', lineHeight: 1.1 }}>
+                          <span style={{ fontFamily: "'Bebas Neue', cursive", fontSize: '22px', color: S.green, letterSpacing: '1px' }}>
+                            {fmt(c.total)}
+                          </span>
+                          <span style={{ fontSize: '9px', letterSpacing: '1.5px', color: S.muted, fontWeight: 700, marginTop: '2px' }}>
+                            SALES
+                          </span>
+                        </div>
+                        <div style={{ width: '1px', height: '32px', background: S.border }} />
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', lineHeight: 1.1 }}>
+                          <span style={{ fontFamily: "'Bebas Neue', cursive", fontSize: '22px', color: accent, letterSpacing: '1px' }}>
+                            {fmt(c.revenue)}
+                          </span>
+                          <span style={{ fontSize: '9px', letterSpacing: '1.5px', color: S.muted, fontWeight: 700, marginTop: '2px' }}>
+                            REVENUE
+                          </span>
+                        </div>
                         <span style={{ color: S.muted, fontSize: '12px', transform: expanded ? 'rotate(90deg)' : 'rotate(0)', transition: 'transform 0.15s' }}>▶</span>
                       </div>
                     </button>
@@ -479,6 +498,7 @@ export default function ReportsPage() {
                             <tr>
                               <th style={{ textAlign: 'left', padding: '6px 0', fontSize: '10px', letterSpacing: '1px', color: S.muted, fontWeight: 700 }}>PRODUCT</th>
                               <th style={{ textAlign: 'right', padding: '6px 0', fontSize: '10px', letterSpacing: '1px', color: S.muted, fontWeight: 700 }}>QTY</th>
+                              <th style={{ textAlign: 'right', padding: '6px 0', fontSize: '10px', letterSpacing: '1px', color: S.muted, fontWeight: 700 }}>SALES</th>
                               <th style={{ textAlign: 'right', padding: '6px 0', fontSize: '10px', letterSpacing: '1px', color: S.muted, fontWeight: 700 }}>REVENUE</th>
                             </tr>
                           </thead>
@@ -487,6 +507,7 @@ export default function ReportsPage() {
                               <tr key={p.name} style={{ borderTop: `1px solid ${S.border}40` }}>
                                 <td style={{ padding: '6px 0', color: S.text }}>{p.name}</td>
                                 <td style={{ padding: '6px 0', textAlign: 'right', color: S.textSub }}>{p.qty}</td>
+                                <td style={{ padding: '6px 0', textAlign: 'right', color: S.green, fontWeight: 600 }}>{fmt(p.total)}</td>
                                 <td style={{ padding: '6px 0', textAlign: 'right', color: accent, fontWeight: 600 }}>{fmt(p.revenue)}</td>
                               </tr>
                             ))}
@@ -498,7 +519,39 @@ export default function ReportsPage() {
                 )
               })}
             </div>
-          )}
+
+            {/* Grand totals footer */}
+            <div style={{
+              marginTop: '14px', padding: '14px 18px',
+              background: `linear-gradient(135deg, ${S.green}15, ${S.amber}10)`,
+              border: `1px solid ${S.border}`, borderRadius: '12px',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                <span style={{ fontSize: '10px', letterSpacing: '2px', color: S.muted, fontWeight: 700 }}>TOTAL ALL CATEGORIES</span>
+                <span style={{ fontSize: '11px', color: S.textSub }}>
+                  {data.category_sales.length} categor{data.category_sales.length !== 1 ? 'ies' : 'y'} · {totalQty} items sold
+                </span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '18px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', lineHeight: 1.1 }}>
+                  <span style={{ fontFamily: "'Bebas Neue', cursive", fontSize: '24px', color: S.green, letterSpacing: '1px' }}>
+                    {fmt(totalSales)}
+                  </span>
+                  <span style={{ fontSize: '9px', letterSpacing: '1.5px', color: S.muted, fontWeight: 700, marginTop: '2px' }}>TOTAL SALES</span>
+                </div>
+                <div style={{ width: '1px', height: '36px', background: S.border }} />
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', lineHeight: 1.1 }}>
+                  <span style={{ fontFamily: "'Bebas Neue', cursive", fontSize: '24px', color: S.amber, letterSpacing: '1px' }}>
+                    {fmt(totalRevenue)}
+                  </span>
+                  <span style={{ fontSize: '9px', letterSpacing: '1.5px', color: S.muted, fontWeight: 700, marginTop: '2px' }}>TOTAL REVENUE</span>
+                </div>
+              </div>
+            </div>
+            </>
+            )
+          })()}
         </div>
 
         {/* Top Products — Editorial Leaderboard */}
