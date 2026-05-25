@@ -26,6 +26,9 @@ export default function InventoryPage() {
   const [editProduct, setEditProduct] = useState<StockLevel | null>(null)
   const [adjustQty, setAdjustQty] = useState(0)
   const [adjustNote, setAdjustNote] = useState('')
+  const [editPrice, setEditPrice] = useState('')
+  const [editOriginalPrice, setEditOriginalPrice] = useState('')
+  const [editError, setEditError] = useState<string | null>(null)
   const [editLoading, setEditLoading] = useState(false)
 
   const [showAdd, setShowAdd] = useState(false)
@@ -117,18 +120,66 @@ export default function InventoryPage() {
   })
 
   async function handleAdjust() {
-    if (!editProduct || adjustQty === 0 || !adjustNote.trim()) return
+    if (!editProduct) return
+    const qtyChanged = adjustQty !== 0
+    const priceNum = editPrice === '' ? null : Number(editPrice)
+    const origNum = editOriginalPrice === '' ? null : Number(editOriginalPrice)
+    const priceChanged = priceNum !== null && priceNum !== editProduct.price
+    const origChanged = origNum !== null && origNum !== editProduct.original_price
+
+    if (!qtyChanged && !priceChanged && !origChanged) {
+      setEditError('Change qty, selling price, or original price first')
+      return
+    }
+    if (qtyChanged && !adjustNote.trim()) {
+      setEditError('Note required when adjusting qty')
+      return
+    }
+    if (priceChanged && (!Number.isFinite(priceNum) || priceNum! < 0)) {
+      setEditError('Selling price must be a non-negative number')
+      return
+    }
+    if (origChanged && (!Number.isFinite(origNum) || origNum! < 0)) {
+      setEditError('Original price must be a non-negative number')
+      return
+    }
+
+    setEditError(null)
     setEditLoading(true)
     try {
-      await fetch('/api/inventory', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ product_id: editProduct.id, qty: adjustQty, note: adjustNote }),
-      })
+      const tasks: Promise<Response>[] = []
+      if (priceChanged || origChanged) {
+        const body: Record<string, number> = {}
+        if (priceChanged) body.price = priceNum!
+        if (origChanged) body.original_price = origNum!
+        tasks.push(fetch('/api/products', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: editProduct.id, ...body }),
+        }))
+      }
+      if (qtyChanged) {
+        tasks.push(fetch('/api/inventory', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ product_id: editProduct.id, qty: adjustQty, note: adjustNote }),
+        }))
+      }
+      const results = await Promise.all(tasks)
+      const failed = results.find(r => !r.ok)
+      if (failed) {
+        const j = await failed.json().catch(() => ({}))
+        setEditError(j.error ?? `Update failed (${failed.status})`)
+        return
+      }
       setEditProduct(null)
       setAdjustQty(0)
       setAdjustNote('')
+      setEditPrice('')
+      setEditOriginalPrice('')
       await fetchProducts()
+    } catch (e) {
+      setEditError(e instanceof Error ? e.message : 'Update failed')
     } finally {
       setEditLoading(false)
     }
@@ -445,7 +496,14 @@ export default function InventoryPage() {
                 <td className="px-3 sm:px-4 py-3 text-right">
                   <div className="flex gap-1 justify-end flex-wrap">
                     <button
-                      onClick={() => { setEditProduct(p); setAdjustQty(0); setAdjustNote('') }}
+                      onClick={() => {
+                        setEditProduct(p)
+                        setAdjustQty(0)
+                        setAdjustNote('')
+                        setEditPrice(String(p.price ?? ''))
+                        setEditOriginalPrice(String(p.original_price ?? ''))
+                        setEditError(null)
+                      }}
                       className="px-2.5 py-1 text-xs bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 rounded-lg font-medium transition-colors"
                     >
                       Edit stock
@@ -480,11 +538,39 @@ export default function InventoryPage() {
       {editProduct && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-40 p-4">
           <div className="bg-gray-900 border border-gray-800 rounded-2xl shadow-2xl w-full max-w-sm p-6">
-            <h2 className="text-lg font-bold mb-1">Adjust Stock</h2>
+            <h2 className="text-lg font-bold mb-1">Edit Product</h2>
             <p className="text-sm text-gray-400 mb-5">
-              {editProduct.name} — current: <strong className="text-white">{editProduct.stock_qty}</strong>
+              {editProduct.name} — current stock: <strong className="text-white">{editProduct.stock_qty}</strong>
             </p>
             <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Original price (₱)</label>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="0.01"
+                    min="0"
+                    value={editOriginalPrice}
+                    onChange={e => setEditOriginalPrice(e.target.value)}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    placeholder="cost"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Selling price (₱)</label>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="0.01"
+                    min="0"
+                    value={editPrice}
+                    onChange={e => setEditPrice(e.target.value)}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                    placeholder="sell"
+                  />
+                </div>
+              </div>
               <div>
                 <label className="block text-xs font-medium text-gray-400 mb-1">Qty change (+ or −)</label>
                 <input
@@ -496,18 +582,32 @@ export default function InventoryPage() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-400 mb-1">Note (required)</label>
+                <label className="block text-xs font-medium text-gray-400 mb-1">
+                  Note {adjustQty !== 0 ? '(required for qty change)' : '(optional)'}
+                </label>
                 <input
                   type="text"
                   value={adjustNote}
                   onChange={e => setAdjustNote(e.target.value)}
                   className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500"
                   placeholder="e.g. Damaged goods"
+                  disabled={adjustQty === 0}
                 />
               </div>
-              <div className="text-xs text-gray-500 bg-gray-800 rounded-xl px-3 py-2">
-                New stock: <strong className="text-white">{editProduct.stock_qty + adjustQty}</strong>
+              <div className="text-xs text-gray-500 bg-gray-800 rounded-xl px-3 py-2 grid grid-cols-2 gap-2">
+                <span>New stock: <strong className="text-white">{editProduct.stock_qty + adjustQty}</strong></span>
+                <span className="text-right">
+                  Profit: <strong className={
+                    (Number(editPrice || editProduct.price) - Number(editOriginalPrice || editProduct.original_price)) < 0
+                      ? 'text-red-400' : 'text-green-400'
+                  }>
+                    ₱{(Number(editPrice || editProduct.price) - Number(editOriginalPrice || editProduct.original_price)).toFixed(2)}
+                  </strong>
+                </span>
               </div>
+              {editError && (
+                <p className="text-xs text-red-400 bg-red-900/20 border border-red-500/30 rounded-xl px-3 py-2">{editError}</p>
+              )}
             </div>
             <div className="flex gap-2 mt-5">
               <button
@@ -518,7 +618,7 @@ export default function InventoryPage() {
               </button>
               <button
                 onClick={handleAdjust}
-                disabled={editLoading || adjustQty === 0 || !adjustNote.trim()}
+                disabled={editLoading}
                 className="flex-1 px-4 py-2.5 bg-green-600 hover:bg-green-500 text-white rounded-xl text-sm font-bold disabled:opacity-40 transition-colors"
               >
                 {editLoading ? 'Saving…' : 'Save'}

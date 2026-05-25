@@ -22,11 +22,29 @@ export async function GET(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json()
-    const { id, barcode, image_url } = body
+    const { id, barcode, image_url, price, original_price, name, category, low_stock_threshold } = body
     if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
     const updates: Record<string, unknown> = {}
     if (barcode !== undefined) updates.barcode = barcode
     if (image_url !== undefined) updates.image_url = image_url
+    if (price !== undefined) {
+      const n = Number(price)
+      if (!Number.isFinite(n) || n < 0) return NextResponse.json({ error: 'price must be a non-negative number' }, { status: 400 })
+      updates.price = n
+    }
+    if (original_price !== undefined) {
+      const n = Number(original_price)
+      if (!Number.isFinite(n) || n < 0) return NextResponse.json({ error: 'original_price must be a non-negative number' }, { status: 400 })
+      updates.original_price = n
+    }
+    if (name !== undefined) updates.name = name
+    if (category !== undefined) updates.category = category
+    if (low_stock_threshold !== undefined) {
+      const n = Number(low_stock_threshold)
+      if (!Number.isInteger(n) || n < 0) return NextResponse.json({ error: 'low_stock_threshold must be a non-negative integer' }, { status: 400 })
+      updates.low_stock_threshold = n
+    }
+    if (Object.keys(updates).length === 0) return NextResponse.json({ error: 'no fields to update' }, { status: 400 })
     const { data, error } = await supabase
       .from('products')
       .update(updates)
