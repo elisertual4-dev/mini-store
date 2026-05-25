@@ -222,6 +222,16 @@ export default function ReportsPage() {
         @media (max-width: 480px) {
           .rp-toolbar input[type="date"] { flex: 1 1 45%; min-width: 0; }
         }
+        /* Visible calendar picker indicator on dark backgrounds */
+        .rp-daily-date::-webkit-calendar-picker-indicator {
+          filter: invert(1) brightness(1.2) opacity(0.9);
+          cursor: pointer;
+          margin-left: 4px;
+        }
+        .rp-toolbar input[type="date"]::-webkit-calendar-picker-indicator {
+          filter: invert(1) brightness(1.2) opacity(0.9);
+          cursor: pointer;
+        }
       `}</style>
       <div style={{
         position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0,
@@ -243,10 +253,10 @@ export default function ReportsPage() {
           </div>
           <div className="rp-toolbar">
             <input type="date" value={from} onChange={e => setFrom(e.target.value)}
-              style={{ background: S.surface, border: `1px solid ${S.border}`, borderRadius: '8px', color: S.text, padding: '8px 12px', fontSize: '13px', fontFamily: 'inherit' }} />
+              style={{ background: S.surface, border: `1px solid ${S.border}`, borderRadius: '8px', color: S.text, padding: '8px 12px', fontSize: '13px', fontFamily: 'inherit', colorScheme: 'dark' }} />
             <span style={{ color: S.muted, fontSize: '12px' }}>to</span>
             <input type="date" value={to} onChange={e => setTo(e.target.value)}
-              style={{ background: S.surface, border: `1px solid ${S.border}`, borderRadius: '8px', color: S.text, padding: '8px 12px', fontSize: '13px', fontFamily: 'inherit' }} />
+              style={{ background: S.surface, border: `1px solid ${S.border}`, borderRadius: '8px', color: S.text, padding: '8px 12px', fontSize: '13px', fontFamily: 'inherit', colorScheme: 'dark' }} />
             <button onClick={() => syncSheets()} disabled={syncing} style={{
               padding: '8px 16px', background: 'transparent', border: `1px solid ${S.border}`,
               borderRadius: '8px', color: S.textSub, fontSize: '12px', fontWeight: 700,
@@ -304,10 +314,12 @@ export default function ReportsPage() {
                 value={dailyDate}
                 max={phToday()}
                 onChange={e => setDailyDate(e.target.value)}
+                className="rp-daily-date"
                 style={{
                   background: S.bg, border: `1px solid ${S.border}`,
                   borderRadius: '6px', color: S.text,
                   padding: '4px 8px', fontSize: '11px', fontFamily: 'inherit',
+                  colorScheme: 'dark',
                 }}
               />
             </div>
