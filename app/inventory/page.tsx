@@ -22,6 +22,7 @@ export default function InventoryPage() {
   const [loading, setLoading] = useState(true)
   const [categoryFilter, setCategoryFilter] = useState('')
   const [lowStockOnly, setLowStockOnly] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
 
   const [editProduct, setEditProduct] = useState<StockLevel | null>(null)
   const [adjustQty, setAdjustQty] = useState(0)
@@ -113,9 +114,14 @@ export default function InventoryPage() {
 
   const categories = Array.from(new Set(products.map(p => p.category).filter(Boolean))) as string[]
 
+  const q = searchQuery.trim().toLowerCase()
   const filtered = products.filter(p => {
     if (lowStockOnly && !p.is_low_stock) return false
     if (categoryFilter && p.category !== categoryFilter) return false
+    if (q) {
+      const hay = `${p.name} ${p.barcode ?? ''} ${p.category ?? ''}`.toLowerCase()
+      if (!hay.includes(q)) return false
+    }
     return true
   })
 
@@ -369,6 +375,25 @@ export default function InventoryPage() {
 
       {/* Filters */}
       <div className="flex gap-3 mb-4 flex-wrap items-center">
+        <div className="relative flex-1 min-w-[200px] sm:max-w-sm">
+          <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
+          </svg>
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Search product, barcode, or category…"
+            className="w-full pl-9 pr-9 py-1.5 bg-gray-800 border border-gray-700 text-gray-100 placeholder-gray-500 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white p-1"
+              aria-label="Clear search"
+            >×</button>
+          )}
+        </div>
         <select
           value={categoryFilter}
           onChange={e => setCategoryFilter(e.target.value)}
@@ -386,9 +411,9 @@ export default function InventoryPage() {
           />
           Low stock only
         </label>
-        {(categoryFilter || lowStockOnly) && (
+        {(categoryFilter || lowStockOnly || searchQuery) && (
           <button
-            onClick={() => { setCategoryFilter(''); setLowStockOnly(false) }}
+            onClick={() => { setCategoryFilter(''); setLowStockOnly(false); setSearchQuery('') }}
             className="text-sm text-green-400 hover:text-green-300 transition-colors"
           >
             Clear filters
