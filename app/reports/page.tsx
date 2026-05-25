@@ -97,6 +97,7 @@ export default function ReportsPage() {
   const [syncErr, setSyncErr] = useState(false)
   const [clearing, setClearing] = useState(false)
   const [expandedCats, setExpandedCats] = useState<Record<string, boolean>>({})
+  const [expandedStockCats, setExpandedStockCats] = useState<Record<string, boolean>>({})
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -704,50 +705,101 @@ export default function ReportsPage() {
           )}
         </div>
 
-        {/* Stock Snapshot Table */}
+        {/* Stock Snapshot — Category accordion */}
         <div style={{ background: S.surface, border: `1px solid ${S.border}`, borderRadius: '16px', overflow: 'hidden' }}>
-          <div style={{ padding: '20px 24px', borderBottom: `1px solid ${S.border}` }}>
+          <div style={{ padding: '20px 24px', borderBottom: `1px solid ${S.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
             <p style={{ fontSize: '11px', letterSpacing: '2px', color: S.muted, fontWeight: 700 }}>STOCK SNAPSHOT</p>
+            <p style={{ fontSize: '10px', letterSpacing: '1px', color: S.muted }}>Tap category to expand</p>
           </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-              <thead>
-                <tr style={{ borderBottom: `1px solid ${S.border}` }}>
-                  {['Product', 'Category', 'Stock', 'Threshold', 'Status'].map(h => (
-                    <th key={h} style={{
-                      padding: '12px 20px', textAlign: h === 'Stock' || h === 'Threshold' ? 'right' : 'left',
-                      fontSize: '10px', fontWeight: 700, letterSpacing: '2px', color: S.muted,
-                    }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr><td colSpan={5} style={{ padding: '40px', textAlign: 'center', color: S.muted }}>Loading…</td></tr>
-                ) : !data?.stock_snapshot.length ? (
-                  <tr><td colSpan={5} style={{ padding: '40px', textAlign: 'center', color: S.muted }}>No products</td></tr>
-                ) : data.stock_snapshot.map((p, i) => (
-                  <tr key={p.id} style={{ borderBottom: `1px solid ${S.border}`, background: i % 2 === 0 ? 'transparent' : `${S.border}30` }}>
-                    <td style={{ padding: '12px 20px', color: S.text, fontWeight: 500 }}>{p.name}</td>
-                    <td style={{ padding: '12px 20px', color: S.muted, fontSize: '12px' }}>{p.category ?? '—'}</td>
-                    <td style={{ padding: '12px 20px', textAlign: 'right', fontFamily: "'Bebas Neue', cursive", fontSize: '18px', color: p.is_low_stock ? S.red : S.green }}>
-                      {p.stock_qty}
-                    </td>
-                    <td style={{ padding: '12px 20px', textAlign: 'right', color: S.muted, fontSize: '12px' }}>{p.low_stock_threshold}</td>
-                    <td style={{ padding: '12px 20px' }}>
-                      <span style={{
-                        display: 'inline-block', padding: '3px 10px', borderRadius: '20px', fontSize: '10px', fontWeight: 700, letterSpacing: '1px',
-                        background: p.is_low_stock ? '#7f1d1d40' : '#14532d40',
-                        color: p.is_low_stock ? S.red : S.green,
-                        border: `1px solid ${p.is_low_stock ? S.red + '50' : S.green + '50'}`,
-                      }}>
-                        {p.is_low_stock ? 'LOW' : 'OK'}
+          <div>
+            {loading ? (
+              <div style={{ padding: '40px', textAlign: 'center', color: S.muted }}>Loading…</div>
+            ) : !data?.stock_snapshot.length ? (
+              <div style={{ padding: '40px', textAlign: 'center', color: S.muted }}>No products</div>
+            ) : (() => {
+              const grouped: Record<string, { category: string; items: StockLevel[]; totalStock: number; lowCount: number }> = {}
+              for (const p of data.stock_snapshot) {
+                const cat = p.category ?? 'Uncategorized'
+                if (!grouped[cat]) grouped[cat] = { category: cat, items: [], totalStock: 0, lowCount: 0 }
+                grouped[cat].items.push(p)
+                grouped[cat].totalStock += p.stock_qty
+                if (p.is_low_stock) grouped[cat].lowCount += 1
+              }
+              const cats = Object.values(grouped).sort((a, b) => a.category.localeCompare(b.category))
+              return cats.map(c => {
+                const expanded = expandedStockCats[c.category] ?? false
+                return (
+                  <div key={c.category} style={{ borderBottom: `1px solid ${S.border}` }}>
+                    <button
+                      onClick={() => setExpandedStockCats(s => ({ ...s, [c.category]: !expanded }))}
+                      style={{
+                        width: '100%', background: 'transparent', border: 'none',
+                        padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        cursor: 'pointer', color: S.text, fontFamily: 'inherit', textAlign: 'left',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '14px', minWidth: 0 }}>
+                        <span style={{ color: S.muted, fontSize: '12px', transform: expanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s', display: 'inline-block', width: '12px' }}>▶</span>
+                        <span style={{ fontSize: '15px', fontWeight: 600, color: S.text }}>{c.category}</span>
+                        <span style={{
+                          display: 'inline-block', padding: '2px 9px', borderRadius: '999px',
+                          background: `${S.amber}20`, color: S.amber,
+                          fontFamily: 'monospace', fontSize: '11px', fontWeight: 600,
+                        }}>{c.items.length} item{c.items.length !== 1 ? 's' : ''}</span>
+                        {c.lowCount > 0 && (
+                          <span style={{
+                            display: 'inline-block', padding: '2px 9px', borderRadius: '999px',
+                            background: '#7f1d1d40', color: S.red, border: `1px solid ${S.red}50`,
+                            fontSize: '10px', fontWeight: 700, letterSpacing: '1px',
+                          }}>{c.lowCount} LOW</span>
+                        )}
+                      </div>
+                      <span style={{ fontFamily: "'Bebas Neue', cursive", fontSize: '22px', color: S.green, letterSpacing: '1px' }}>
+                        {c.totalStock} <span style={{ fontSize: '11px', color: S.muted, letterSpacing: '2px' }}>UNITS</span>
                       </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </button>
+                    {expanded && (
+                      <div style={{ background: `${S.border}20`, overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                          <thead>
+                            <tr style={{ borderTop: `1px solid ${S.border}` }}>
+                              {['Product', 'Stock', 'Threshold', 'Status'].map(h => (
+                                <th key={h} style={{
+                                  padding: '10px 24px',
+                                  textAlign: h === 'Stock' || h === 'Threshold' ? 'right' : h === 'Status' ? 'right' : 'left',
+                                  fontSize: '9px', fontWeight: 700, letterSpacing: '2px', color: S.muted,
+                                }}>{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {c.items.map(p => (
+                              <tr key={p.id} style={{ borderTop: `1px solid ${S.border}40` }}>
+                                <td style={{ padding: '10px 24px', color: S.text, fontWeight: 500 }}>{p.name}</td>
+                                <td style={{ padding: '10px 24px', textAlign: 'right', fontFamily: "'Bebas Neue', cursive", fontSize: '16px', color: p.is_low_stock ? S.red : S.green }}>
+                                  {p.stock_qty}
+                                </td>
+                                <td style={{ padding: '10px 24px', textAlign: 'right', color: S.muted, fontSize: '12px' }}>{p.low_stock_threshold}</td>
+                                <td style={{ padding: '10px 24px', textAlign: 'right' }}>
+                                  <span style={{
+                                    display: 'inline-block', padding: '3px 10px', borderRadius: '20px', fontSize: '10px', fontWeight: 700, letterSpacing: '1px',
+                                    background: p.is_low_stock ? '#7f1d1d40' : '#14532d40',
+                                    color: p.is_low_stock ? S.red : S.green,
+                                    border: `1px solid ${p.is_low_stock ? S.red + '50' : S.green + '50'}`,
+                                  }}>
+                                    {p.is_low_stock ? 'LOW' : 'OK'}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )
+              })
+            })()}
           </div>
         </div>
       </div>
