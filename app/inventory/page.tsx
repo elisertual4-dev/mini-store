@@ -29,6 +29,7 @@ export default function InventoryPage() {
   const [adjustNote, setAdjustNote] = useState('')
   const [editPrice, setEditPrice] = useState('')
   const [editOriginalPrice, setEditOriginalPrice] = useState('')
+  const [editName, setEditName] = useState('')
   const [editError, setEditError] = useState<string | null>(null)
   const [editLoading, setEditLoading] = useState(false)
 
@@ -132,9 +133,15 @@ export default function InventoryPage() {
     const origNum = editOriginalPrice === '' ? null : Number(editOriginalPrice)
     const priceChanged = priceNum !== null && priceNum !== editProduct.price
     const origChanged = origNum !== null && origNum !== editProduct.original_price
+    const trimmedName = editName.trim()
+    const nameChanged = trimmedName !== '' && trimmedName !== editProduct.name
 
-    if (!qtyChanged && !priceChanged && !origChanged) {
-      setEditError('Change qty, selling price, or original price first')
+    if (!qtyChanged && !priceChanged && !origChanged && !nameChanged) {
+      setEditError('Change name, qty, selling price, or original price first')
+      return
+    }
+    if (editName !== '' && trimmedName === '') {
+      setEditError('Name cannot be blank')
       return
     }
     if (qtyChanged && !adjustNote.trim()) {
@@ -154,10 +161,11 @@ export default function InventoryPage() {
     setEditLoading(true)
     try {
       const tasks: Promise<Response>[] = []
-      if (priceChanged || origChanged) {
-        const body: Record<string, number> = {}
+      if (priceChanged || origChanged || nameChanged) {
+        const body: Record<string, number | string> = {}
         if (priceChanged) body.price = priceNum!
         if (origChanged) body.original_price = origNum!
+        if (nameChanged) body.name = trimmedName
         tasks.push(fetch('/api/products', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -183,6 +191,7 @@ export default function InventoryPage() {
       setAdjustNote('')
       setEditPrice('')
       setEditOriginalPrice('')
+      setEditName('')
       await fetchProducts()
     } catch (e) {
       setEditError(e instanceof Error ? e.message : 'Update failed')
@@ -527,6 +536,7 @@ export default function InventoryPage() {
                         setAdjustNote('')
                         setEditPrice(String(p.price ?? ''))
                         setEditOriginalPrice(String(p.original_price ?? ''))
+                        setEditName(p.name ?? '')
                         setEditError(null)
                       }}
                       className="px-2.5 py-1 text-xs bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 rounded-lg font-medium transition-colors"
@@ -565,9 +575,20 @@ export default function InventoryPage() {
           <div className="bg-gray-900 border border-gray-800 rounded-2xl shadow-2xl w-full max-w-sm p-6">
             <h2 className="text-lg font-bold mb-1">Edit Product</h2>
             <p className="text-sm text-gray-400 mb-5">
-              {editProduct.name} — current stock: <strong className="text-white">{editProduct.stock_qty}</strong>
+              Current stock: <strong className="text-white">{editProduct.stock_qty}</strong>
             </p>
             <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1">Product name</label>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={e => setEditName(e.target.value)}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                  placeholder="Product name"
+                  maxLength={200}
+                />
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-400 mb-1">Original price (₱)</label>
