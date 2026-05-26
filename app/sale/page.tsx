@@ -64,21 +64,28 @@ function SaleContent() {
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false)
   const customerWrapRef = useRef<HTMLDivElement>(null)
 
-  // Hydrate cart from localStorage on mount
+  // localStorage is the source of truth for the cart. React state mirrors
+  // it for rendering. Every mutation reads-modify-writes storage and then
+  // syncs state. This eliminates the hydrate/persist race that was
+  // causing scans to wipe the cart on some Android Chrome PWAs.
+
+  // Hydrate React state from storage on mount.
   useEffect(() => {
     setCart(loadCart())
   }, [])
 
-  // Persist cart on every change (skip first render to avoid clobbering
-  // the just-hydrated value with the initial empty array).
-  const persistInitRef = useRef(true)
+  // Sync state if another tab/PWA window mutates storage.
   useEffect(() => {
-    if (persistInitRef.current) { persistInitRef.current = false; return }
-    saveCart(cart)
-  }, [cart])
+    function onStorage(e: StorageEvent) {
+      if (e.key === CART_KEY) setCart(loadCart())
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [])
 
-  // Add a scanned barcode to the cart. Re-used by the URL-param path and
-  // the localStorage-handoff path so same logic runs either way.
+  // Add a scanned barcode to the cart. Reads fresh state from storage,
+  // mutates it, writes back, then syncs React state — never relies on
+  // the in-memory cart variable.
   const addBarcodeToCart = useCallback(async (code: string) => {
     setScanLoading(true)
     setScanError(null)
@@ -86,32 +93,42 @@ function SaleContent() {
       const res = await fetch(`/api/products?barcode=${encodeURIComponent(code)}&t=${Date.now()}`, { cache: 'no-store' })
       if (!res.ok) throw new Error('Product not found for barcode: ' + code)
       const p: Product = await res.json()
-      setCart(prev => {
-        const idx = prev.findIndex(it => it.id === p.id)
-        if (idx >= 0) {
-          const next = [...prev]
-          const newQty = next[idx].qty + 1
-          if (newQty > p.stock_qty) {
-            setScanError(`Only ${p.stock_qty} ${p.name} in stock`)
-            return prev
-          }
-          next[idx] = { ...next[idx], qty: newQty, stock_qty: p.stock_qty, price: p.price, image_url: p.image_url }
-          return next
+
+      const current = loadCart()
+      const idx = current.findIndex(it => it.id === p.id)
+      let next: CartItem[]
+      if (idx >= 0) {
+        const newQty = current[idx].qty + 1
+        if (newQty > p.stock_qty) {
+          setScanError(`Only ${p.stock_qty} ${p.name} in stock`)
+          return
         }
+        next = [...current]
+        next[idx] = { ...next[idx], qty: newQty, stock_qty: p.stock_qty, price: p.price, image_url: p.image_url }
+      } else {
         if (p.stock_qty < 1) {
           setScanError(`${p.name} is out of stock`)
-          return prev
+          return
         }
-        return [...prev, {
+        next = [...current, {
           id: p.id, name: p.name, barcode: p.barcode, price: p.price,
           stock_qty: p.stock_qty, category: p.category, image_url: p.image_url, qty: 1,
         }]
-      })
+      }
+      saveCart(next)
+      setCart(next)
     } catch (e: unknown) {
       setScanError(e instanceof Error ? e.message : 'Failed to add product')
     } finally {
       setScanLoading(false)
     }
+  }, [])
+
+  // Cart mutations from UI (qty +/-, remove, clear) write to storage
+  // then sync React state, same pattern as add.
+  const writeCart = useCallback((next: CartItem[]) => {
+    saveCart(next)
+    setCart(next)
   }, [])
 
   // Drain any barcode pending in localStorage (the scanner writes it
@@ -175,24 +192,24 @@ function SaleContent() {
   }, [])
 
   const updateQty = useCallback((id: string, delta: number) => {
-    setCart(prev => {
-      return prev.map(it => {
-        if (it.id !== id) return it
-        const newQty = it.qty + delta
-        if (newQty < 1) return it
-        if (newQty > it.stock_qty) return it
-        return { ...it, qty: newQty }
-      })
+    const current = loadCart()
+    const next = current.map(it => {
+      if (it.id !== id) return it
+      const newQty = it.qty + delta
+      if (newQty < 1) return it
+      if (newQty > it.stock_qty) return it
+      return { ...it, qty: newQty }
     })
-  }, [])
+    writeCart(next)
+  }, [writeCart])
 
   const removeItem = useCallback((id: string) => {
-    setCart(prev => prev.filter(it => it.id !== id))
-  }, [])
+    writeCart(loadCart().filter(it => it.id !== id))
+  }, [writeCart])
 
   const clearCart = useCallback(() => {
-    setCart([])
-  }, [])
+    writeCart([])
+  }, [writeCart])
 
   const totalAmount = cart.reduce((s, it) => s + it.price * it.qty, 0)
   const totalUnits = cart.reduce((s, it) => s + it.qty, 0)
@@ -232,7 +249,7 @@ function SaleContent() {
         method: paymentMethod,
         customer: paymentMethod === 'credit' ? trimmedCustomer : undefined,
       })
-      setCart([])
+      writeCart([])
       setCustomerName('')
     } catch (e: unknown) {
       setCheckoutError(e instanceof Error ? e.message : 'Checkout failed')

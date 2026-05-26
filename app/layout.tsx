@@ -46,7 +46,29 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className={inter.className}>
         {children}
         <Script id="register-sw" strategy="afterInteractive">
-          {`if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js').catch(() => {}) }) }`}
+          {`
+            if ('serviceWorker' in navigator) {
+              window.addEventListener('load', function () {
+                navigator.serviceWorker.register('/sw.js')
+                  .then(function (reg) {
+                    // Poll for updates every 60s and on tab focus so installed
+                    // PWAs pick up new deploys without a manual force-stop.
+                    setInterval(function () { reg.update().catch(function () {}) }, 60000)
+                    document.addEventListener('visibilitychange', function () {
+                      if (document.visibilityState === 'visible') reg.update().catch(function () {})
+                    })
+                  })
+                  .catch(function () {})
+                var reloaded = false
+                navigator.serviceWorker.addEventListener('message', function (event) {
+                  if (event.data && event.data.type === 'SW_UPDATED' && !reloaded) {
+                    reloaded = true
+                    window.location.reload()
+                  }
+                })
+              })
+            }
+          `}
         </Script>
       </body>
     </html>
