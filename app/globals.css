@@ -3,3 +3,33 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Android 15+ enforces edge-to-edge; honor safe-area insets so
+   status bar and gesture-nav bar do not overlap UI. */
+html, body {
+  background-color: #080b12;
+  /* iOS/Android safe-area shorthand. min-height kept on body via Tailwind classes per page. */
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+/* Reset any UA tap-highlight color on touch devices */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Allow text selection inside inputs/textareas even in PWA standalone */
+input, textarea, [contenteditable="true"] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Prevent iOS overscroll bounce showing white behind content
+   when in standalone PWA mode */
+@media (display-mode: standalone) {
+  html, body {
+    overscroll-behavior-y: contain;
+  }
+}

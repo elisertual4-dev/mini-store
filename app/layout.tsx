@@ -9,14 +9,26 @@ export const metadata: Metadata = {
   title: 'Hanz Mini Store',
   description: 'Hanz Mini Store inventory & POS system',
   manifest: '/manifest.json',
-  appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'Hanz Mini Store' },
+  applicationName: 'Hanz Mini Store',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'Hanz Mini Store',
+  },
+  formatDetection: { telephone: false },
 }
 
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
-  themeColor: '#2563eb',
+  // maximumScale removed: blocking pinch-zoom is an a11y violation and
+  // Android 15 / Chrome warn about it. User can still scale.
+  viewportFit: 'cover',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#080b12' },
+    { media: '(prefers-color-scheme: dark)', color: '#080b12' },
+  ],
+  colorScheme: 'dark',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -27,11 +39,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="application-name" content="Hanz Mini Store" />
+        <meta name="format-detection" content="telephone=no" />
+        <meta name="msapplication-TileColor" content="#080b12" />
       </head>
       <body className={inter.className}>
         {children}
         <Script id="register-sw" strategy="afterInteractive">
-          {`if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/sw.js') }`}
+          {`if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js').catch(() => {}) }) }`}
         </Script>
       </body>
     </html>
