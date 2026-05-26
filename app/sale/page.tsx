@@ -69,52 +69,91 @@ function SaleContent() {
     setCart(loadCart())
   }, [])
 
-  // Persist cart on every change
+  // Persist cart on every change (skip first render to avoid clobbering
+  // the just-hydrated value with the initial empty array).
+  const persistInitRef = useRef(true)
   useEffect(() => {
+    if (persistInitRef.current) { persistInitRef.current = false; return }
     saveCart(cart)
   }, [cart])
 
-  // Handle ?barcode=X — fetch product, append/increment in cart, clear query
-  const handledBarcodeRef = useRef<string | null>(null)
-  useEffect(() => {
-    if (!barcode || handledBarcodeRef.current === barcode) return
-    handledBarcodeRef.current = barcode
-
+  // Add a scanned barcode to the cart. Re-used by the URL-param path and
+  // the localStorage-handoff path so same logic runs either way.
+  const addBarcodeToCart = useCallback(async (code: string) => {
     setScanLoading(true)
     setScanError(null)
-    fetch(`/api/products?barcode=${encodeURIComponent(barcode)}`)
-      .then(r => r.ok ? r.json() : Promise.reject('Product not found for barcode: ' + barcode))
-      .then((p: Product) => {
-        setCart(prev => {
-          const idx = prev.findIndex(it => it.id === p.id)
-          if (idx >= 0) {
-            // increment if stock allows
-            const next = [...prev]
-            const newQty = next[idx].qty + 1
-            if (newQty > p.stock_qty) {
-              setScanError(`Only ${p.stock_qty} ${p.name} in stock`)
-              return prev
-            }
-            next[idx] = { ...next[idx], qty: newQty, stock_qty: p.stock_qty, price: p.price, image_url: p.image_url }
-            return next
-          }
-          if (p.stock_qty < 1) {
-            setScanError(`${p.name} is out of stock`)
+    try {
+      const res = await fetch(`/api/products?barcode=${encodeURIComponent(code)}&t=${Date.now()}`, { cache: 'no-store' })
+      if (!res.ok) throw new Error('Product not found for barcode: ' + code)
+      const p: Product = await res.json()
+      setCart(prev => {
+        const idx = prev.findIndex(it => it.id === p.id)
+        if (idx >= 0) {
+          const next = [...prev]
+          const newQty = next[idx].qty + 1
+          if (newQty > p.stock_qty) {
+            setScanError(`Only ${p.stock_qty} ${p.name} in stock`)
             return prev
           }
-          return [...prev, {
-            id: p.id, name: p.name, barcode: p.barcode, price: p.price,
-            stock_qty: p.stock_qty, category: p.category, image_url: p.image_url, qty: 1,
-          }]
-        })
+          next[idx] = { ...next[idx], qty: newQty, stock_qty: p.stock_qty, price: p.price, image_url: p.image_url }
+          return next
+        }
+        if (p.stock_qty < 1) {
+          setScanError(`${p.name} is out of stock`)
+          return prev
+        }
+        return [...prev, {
+          id: p.id, name: p.name, barcode: p.barcode, price: p.price,
+          stock_qty: p.stock_qty, category: p.category, image_url: p.image_url, qty: 1,
+        }]
       })
-      .catch((e: unknown) => setScanError(typeof e === 'string' ? e : 'Failed to add product'))
-      .finally(() => {
-        setScanLoading(false)
-        // strip ?barcode from URL so re-mount doesn't re-add
-        router.replace('/sale')
-      })
-  }, [barcode, router])
+    } catch (e: unknown) {
+      setScanError(e instanceof Error ? e.message : 'Failed to add product')
+    } finally {
+      setScanLoading(false)
+    }
+  }, [])
+
+  // Drain any barcode pending in localStorage (the scanner writes it
+  // before navigating). Run on mount + on visibility/pageshow so that
+  // returning to a backgrounded /sale tab in PWA still picks it up.
+  const drainPendingBarcode = useCallback(async () => {
+    try {
+      const pending = window.localStorage.getItem('pending_sale_barcode')
+      if (!pending) return
+      window.localStorage.removeItem('pending_sale_barcode')
+      await addBarcodeToCart(pending)
+    } catch { /* storage blocked */ }
+  }, [addBarcodeToCart])
+
+  useEffect(() => {
+    drainPendingBarcode()
+    const onVis = () => { if (document.visibilityState === 'visible') drainPendingBarcode() }
+    const onShow = () => { drainPendingBarcode() }
+    document.addEventListener('visibilitychange', onVis)
+    window.addEventListener('pageshow', onShow)
+    window.addEventListener('focus', onShow)
+    return () => {
+      document.removeEventListener('visibilitychange', onVis)
+      window.removeEventListener('pageshow', onShow)
+      window.removeEventListener('focus', onShow)
+    }
+  }, [drainPendingBarcode])
+
+  // Fallback: also handle ?barcode=X URL param for backwards-compat
+  // (and for cases where localStorage is unavailable). De-duped by the
+  // url-search-string so each unique URL is processed exactly once per mount.
+  const handledQueryRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!barcode) return
+    const sig = barcode + '|' + (searchParams.get('t') ?? '')
+    if (handledQueryRef.current === sig) return
+    handledQueryRef.current = sig
+    addBarcodeToCart(barcode).finally(() => {
+      // Strip query so a back-button re-visit doesn't re-add.
+      router.replace('/sale')
+    })
+  }, [barcode, searchParams, router, addBarcodeToCart])
 
   // Load customer list when switching to credit
   useEffect(() => {

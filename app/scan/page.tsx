@@ -25,8 +25,23 @@ export default function ScanPage() {
     controlsRef.current?.stop()
     controlsRef.current = null
     setScanState('found')
+
+    // Prefer localStorage hand-off (survives Next.js query-param sync
+    // hiccups on Android Chrome PWA / WebView). URL query stays as a
+    // fallback for browsers where localStorage is blocked or for the
+    // /restock destination which still relies on the query.
+    let storageOk = false
+    try {
+      const key = mode === 'sale' ? 'pending_sale_barcode' : 'pending_restock_barcode'
+      window.localStorage.setItem(key, barcode)
+      storageOk = true
+    } catch { /* storage blocked */ }
+
     setTimeout(() => {
-      router.push(`/${mode}?barcode=${encodeURIComponent(barcode)}`)
+      const url = storageOk && mode === 'sale'
+        ? '/sale'
+        : `/${mode}?barcode=${encodeURIComponent(barcode)}&t=${Date.now()}`
+      router.push(url)
     }, 700)
   }
 
