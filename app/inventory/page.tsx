@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import QRCode from 'react-qr-code'
 import type { StockLevel, InventoryLog } from '@/lib/inventory'
@@ -113,12 +113,35 @@ export default function InventoryPage() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [showCategoryDropdown])
 
-  const categories = Array.from(new Set(products.map(p => p.category).filter(Boolean))) as string[]
+  // Categories are stored as free-text on each product, so "Snacks", "snacks"
+  // and "Snacks " get treated as separate buckets even though the operator
+  // meant one. Group case-insensitively + trimmed, pick the most common
+  // capitalization as the display label, and filter against the normalized
+  // key so all variants match.
+  const categories = useMemo(() => {
+    const map = new Map<string, { displays: Record<string, number>; count: number }>()
+    for (const p of products) {
+      if (!p.category) continue
+      const trimmed = p.category.trim()
+      if (!trimmed) continue
+      const key = trimmed.toLowerCase()
+      const entry = map.get(key) ?? { displays: {}, count: 0 }
+      entry.displays[trimmed] = (entry.displays[trimmed] ?? 0) + 1
+      entry.count += 1
+      map.set(key, entry)
+    }
+    return Array.from(map.entries())
+      .map(([key, v]) => {
+        const display = Object.entries(v.displays).sort((a, b) => b[1] - a[1])[0][0]
+        return { key, display, count: v.count }
+      })
+      .sort((a, b) => a.display.localeCompare(b.display))
+  }, [products])
 
   const q = searchQuery.trim().toLowerCase()
   const filtered = products.filter(p => {
     if (lowStockOnly && !p.is_low_stock) return false
-    if (categoryFilter && p.category !== categoryFilter) return false
+    if (categoryFilter && (p.category?.trim().toLowerCase() ?? '') !== categoryFilter) return false
     if (q) {
       const hay = `${p.name} ${p.barcode ?? ''} ${p.category ?? ''}`.toLowerCase()
       if (!hay.includes(q)) return false
@@ -409,7 +432,7 @@ export default function InventoryPage() {
           className="px-3 py-1.5 bg-gray-800 border border-gray-700 text-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
         >
           <option value="">All categories</option>
-          {categories.map(c => <option key={c} value={c}>{c}</option>)}
+          {categories.map(c => <option key={c.key} value={c.key}>{c.display} ({c.count})</option>)}
         </select>
         <label className="flex items-center gap-2 text-sm cursor-pointer select-none text-gray-400 hover:text-white transition-colors">
           <input
@@ -755,20 +778,20 @@ export default function InventoryPage() {
                   />
                   {showCategoryDropdown && categories.length > 0 && (() => {
                     const q = addForm.category.toLowerCase().trim()
-                    const matches = q ? categories.filter(c => c.toLowerCase().includes(q)) : categories
-                    const exactMatch = categories.some(c => c.toLowerCase() === q)
+                    const matches = q ? categories.filter(c => c.key.includes(q)) : categories
+                    const exactMatch = categories.some(c => c.key === q)
                     const showNew = q.length > 0 && !exactMatch
                     if (matches.length === 0 && !showNew) return null
                     return (
                       <div className="absolute z-50 mt-1 w-full bg-gray-800 border border-gray-700 rounded-xl shadow-xl overflow-hidden max-h-48 overflow-y-auto">
                         {matches.map(c => (
                           <button
-                            key={c}
+                            key={c.key}
                             type="button"
-                            onMouseDown={() => { setAddForm(f => ({ ...f, category: c })); setShowCategoryDropdown(false) }}
+                            onMouseDown={() => { setAddForm(f => ({ ...f, category: c.display })); setShowCategoryDropdown(false) }}
                             className="w-full text-left px-3 py-2.5 text-sm text-gray-200 hover:bg-gray-700 transition-colors"
                           >
-                            {c}
+                            {c.display}
                           </button>
                         ))}
                         {showNew && (
