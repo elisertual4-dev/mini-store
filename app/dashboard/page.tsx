@@ -271,11 +271,11 @@ export default function DashboardPage() {
     return Object.values(map).sort((a, b) => b.revenue - a.revenue)
   }, [todayTxs])
 
-  // hourly sales chart (PH local hour)
+  // hourly sales chart — today only (PH local hour)
   const chartData = (() => {
     const hourFmt = new Intl.DateTimeFormat('en-PH', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Manila' })
     const map: Record<string, { time: string; sales: number; orders: number }> = {}
-    txs.forEach(tx => {
+    todayTxs.forEach(tx => {
       const parts = hourFmt.formatToParts(new Date(tx.created_at))
       const hh = parts.find(p => p.type === 'hour')?.value ?? '00'
       const k = `${hh}:00`
@@ -289,7 +289,7 @@ export default function DashboardPage() {
   // top products
   const topProducts = (() => {
     const map: Record<string, { name: string; qty: number; revenue: number; image_url: string | null }> = {}
-    txs.forEach(tx => {
+    todayTxs.forEach(tx => {
       if (!tx.products) return
       const n = tx.products.name
       if (!map[n]) map[n] = { name: n, qty: 0, revenue: 0, image_url: tx.products.image_url ?? null }
