@@ -53,6 +53,12 @@ function SaleContent() {
 
   const [cart, setCart] = useState<CartItem[]>([])
   const [scanLoading, setScanLoading] = useState(false)
+  const [debugLog, setDebugLog] = useState<string[]>([])
+  const [showDebug, setShowDebug] = useState(false)
+  const dlog = useCallback((msg: string) => {
+    const stamp = new Date().toLocaleTimeString('en-PH', { hour12: false, timeZone: 'Asia/Manila' })
+    setDebugLog(l => [...l.slice(-29), `${stamp}  ${msg}`])
+  }, [])
   const [scanError, setScanError] = useState<string | null>(null)
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   const [checkoutError, setCheckoutError] = useState<string | null>(null)
@@ -71,8 +77,24 @@ function SaleContent() {
 
   // Hydrate React state from storage on mount.
   useEffect(() => {
-    setCart(loadCart())
-  }, [])
+    const loaded = loadCart()
+    const ua = typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 80) : '?'
+    const standalone = typeof window !== 'undefined' && window.matchMedia?.('(display-mode: standalone)').matches
+    dlog(`UA: ${ua}`)
+    dlog(`PWA standalone: ${standalone}`)
+    dlog(`mount: loadCart=${loaded.length} items [${loaded.map(i => i.name + 'x' + i.qty).join(', ')}]`)
+    let lsTest = 'ok'
+    try {
+      window.localStorage.setItem('__lstest', '1')
+      const got = window.localStorage.getItem('__lstest')
+      window.localStorage.removeItem('__lstest')
+      if (got !== '1') lsTest = 'roundtrip-fail'
+    } catch (e) {
+      lsTest = 'throw: ' + (e instanceof Error ? e.message : 'unknown')
+    }
+    dlog(`localStorage write-test: ${lsTest}`)
+    setCart(loaded)
+  }, [dlog])
 
   // Sync state if another tab/PWA window mutates storage.
   useEffect(() => {
@@ -87,20 +109,27 @@ function SaleContent() {
   // mutates it, writes back, then syncs React state — never relies on
   // the in-memory cart variable.
   const addBarcodeToCart = useCallback(async (code: string) => {
+    dlog(`add: barcode=${code}`)
     setScanLoading(true)
     setScanError(null)
     try {
       const res = await fetch(`/api/products?barcode=${encodeURIComponent(code)}&t=${Date.now()}`, { cache: 'no-store' })
-      if (!res.ok) throw new Error('Product not found for barcode: ' + code)
+      if (!res.ok) {
+        dlog(`add: product-fetch failed ${res.status}`)
+        throw new Error('Product not found for barcode: ' + code)
+      }
       const p: Product = await res.json()
+      dlog(`add: got product ${p.name} (stock=${p.stock_qty})`)
 
       const current = loadCart()
+      dlog(`add: pre-state from storage = ${current.length} items`)
       const idx = current.findIndex(it => it.id === p.id)
       let next: CartItem[]
       if (idx >= 0) {
         const newQty = current[idx].qty + 1
         if (newQty > p.stock_qty) {
           setScanError(`Only ${p.stock_qty} ${p.name} in stock`)
+          dlog(`add: capped at stock ${p.stock_qty}`)
           return
         }
         next = [...current]
@@ -108,6 +137,7 @@ function SaleContent() {
       } else {
         if (p.stock_qty < 1) {
           setScanError(`${p.name} is out of stock`)
+          dlog('add: out of stock')
           return
         }
         next = [...current, {
@@ -116,13 +146,16 @@ function SaleContent() {
         }]
       }
       saveCart(next)
+      const verify = loadCart()
+      dlog(`add: wrote ${next.length} items, verify-read = ${verify.length}`)
       setCart(next)
     } catch (e: unknown) {
+      dlog(`add: error ${e instanceof Error ? e.message : 'unknown'}`)
       setScanError(e instanceof Error ? e.message : 'Failed to add product')
     } finally {
       setScanLoading(false)
     }
-  }, [])
+  }, [dlog])
 
   // Cart mutations from UI (qty +/-, remove, clear) write to storage
   // then sync React state, same pattern as add.
@@ -137,11 +170,14 @@ function SaleContent() {
   const drainPendingBarcode = useCallback(async () => {
     try {
       const pending = window.localStorage.getItem('pending_sale_barcode')
-      if (!pending) return
+      if (!pending) { dlog('drain: no pending'); return }
+      dlog(`drain: found pending=${pending}`)
       window.localStorage.removeItem('pending_sale_barcode')
       await addBarcodeToCart(pending)
-    } catch { /* storage blocked */ }
-  }, [addBarcodeToCart])
+    } catch (e) {
+      dlog(`drain: error ${e instanceof Error ? e.message : 'unknown'}`)
+    }
+  }, [addBarcodeToCart, dlog])
 
   useEffect(() => {
     drainPendingBarcode()
@@ -298,6 +334,12 @@ function SaleContent() {
       <div className="w-full max-w-md flex items-center gap-3 mt-2">
         <button onClick={() => router.push('/scan')} className="text-gray-400 text-sm hover:text-white">← Scanner</button>
         <h1 className="text-xl font-bold flex-1">Sale Cart</h1>
+        <button
+          onClick={() => setShowDebug(d => !d)}
+          className="text-[10px] text-gray-500 hover:text-gray-300 border border-gray-700 px-2 py-0.5 rounded"
+        >
+          {showDebug ? 'DEBUG✕' : 'DEBUG'}
+        </button>
         {cart.length > 0 && (
           <button
             onClick={() => {
@@ -309,6 +351,20 @@ function SaleContent() {
           </button>
         )}
       </div>
+
+      {showDebug && (
+        <div className="w-full max-w-md bg-black border border-yellow-500/40 rounded-xl p-3 text-[10px] font-mono text-yellow-200 max-h-60 overflow-auto whitespace-pre-wrap break-all">
+          <div className="flex items-center justify-between mb-2 border-b border-yellow-500/30 pb-1">
+            <span className="text-yellow-400 font-bold">DEBUG LOG (cart={cart.length})</span>
+            <button onClick={() => setDebugLog([])} className="text-yellow-500">clear</button>
+          </div>
+          {debugLog.length === 0 ? (
+            <div className="text-gray-500">no events yet</div>
+          ) : (
+            debugLog.map((line, i) => <div key={i}>{line}</div>)
+          )}
+        </div>
+      )}
 
       {scanLoading && (
         <div className="w-full max-w-md bg-blue-900/30 border border-blue-700/40 rounded-xl px-4 py-3 text-sm text-blue-300 flex items-center gap-2">
