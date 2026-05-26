@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useMemo } from 'react'
+import { phDateKey } from '@/lib/ph-date'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -83,17 +84,23 @@ function NavItem({ href, label, icon }: { href: string; label: string; icon: str
   )
 }
 
-function StatCard({ label, value, sub, accent, glow, loading, badge }: {
+function StatCard({ label, value, sub, accent, glow, loading, badge, onClick, hint }: {
   label: string; value: string; sub?: string; accent: string; glow: string;
-  loading: boolean; badge?: boolean
+  loading: boolean; badge?: boolean; onClick?: () => void; hint?: string
 }) {
   return (
-    <div style={{
-      background: C.card, border: `1px solid ${C.border}`, borderRadius: '14px',
-      padding: '20px 22px', position: 'relative', overflow: 'hidden',
-      boxShadow: `0 0 0 0 ${glow}`,
-      transition: 'border-color 0.2s, box-shadow 0.2s',
-    }}
+    <div
+      onClick={onClick}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick() } } : undefined}
+      style={{
+        background: C.card, border: `1px solid ${C.border}`, borderRadius: '14px',
+        padding: '20px 22px', position: 'relative', overflow: 'hidden',
+        boxShadow: `0 0 0 0 ${glow}`,
+        transition: 'border-color 0.2s, box-shadow 0.2s, transform 0.15s',
+        cursor: onClick ? 'pointer' : 'default',
+      }}
       onMouseEnter={e => {
         const el = e.currentTarget as HTMLElement
         el.style.borderColor = accent + '60'
@@ -134,6 +141,11 @@ function StatCard({ label, value, sub, accent, glow, loading, badge }: {
       {sub && !loading && (
         <p style={{ fontSize: '12px', color: C.textSub, marginTop: '6px' }}>{sub}</p>
       )}
+      {hint && onClick && !loading && (
+        <p style={{ fontSize: '10px', color: accent, marginTop: '8px', letterSpacing: '1px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+          {hint} →
+        </p>
+      )}
     </div>
   )
 }
@@ -162,6 +174,7 @@ export default function DashboardPage() {
   const [payingId, setPayingId] = useState<string | null>(null)
   const [creditView, setCreditView] = useState<'customer' | 'daily' | 'all'>('customer')
   const [expandedGroup, setExpandedGroup] = useState<Record<string, boolean>>({})
+  const [showTodayModal, setShowTodayModal] = useState(false)
 
   const fetchMetrics = useCallback(async () => {
     const r = await fetch('/api/dashboard')
@@ -169,7 +182,7 @@ export default function DashboardPage() {
   }, [])
 
   const fetchTxs = useCallback(async () => {
-    const r = await fetch('/api/transactions?limit=50')
+    const r = await fetch('/api/transactions?limit=200')
     if (r.ok) setTxs(await r.json())
   }, [])
 
@@ -238,6 +251,25 @@ export default function DashboardPage() {
     }
     return Object.values(map).sort((a, b) => b.date.localeCompare(a.date))
   }, [credits])
+
+  // Today's transactions (PH local date) for the "Today's Sales" modal
+  const todayTxs = useMemo(() => {
+    const today = phDateKey()
+    return txs.filter(t => phDateKey(t.created_at) === today)
+  }, [txs])
+
+  const todayByProduct = useMemo(() => {
+    type Agg = { name: string; image_url: string | null; qty: number; revenue: number; tx_count: number; category: string | null }
+    const map: Record<string, Agg> = {}
+    for (const t of todayTxs) {
+      const name = t.products?.name ?? 'Unknown'
+      if (!map[name]) map[name] = { name, image_url: t.products?.image_url ?? null, qty: 0, revenue: 0, tx_count: 0, category: null }
+      map[name].qty += t.qty
+      map[name].revenue += t.total
+      map[name].tx_count += 1
+    }
+    return Object.values(map).sort((a, b) => b.revenue - a.revenue)
+  }, [todayTxs])
 
   // hourly sales chart (PH local hour)
   const chartData = (() => {
@@ -419,6 +451,8 @@ export default function DashboardPage() {
             label="Today's Sales" loading={loading}
             value={metrics ? `₱${metrics.today_sales.toLocaleString('en-PH', { minimumFractionDigits: 2 })}` : '—'}
             accent={C.amber} glow={C.amberGlow}
+            onClick={() => setShowTodayModal(true)}
+            hint={`View ${todayByProduct.length} product${todayByProduct.length !== 1 ? 's' : ''} sold`}
           />
           <StatCard
             label="Transactions" loading={loading}
@@ -826,6 +860,114 @@ export default function DashboardPage() {
         </div>
 
       </main>
+
+      {/* Today's Sales modal */}
+      {showTodayModal && (
+        <div
+          onClick={() => setShowTodayModal(false)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)',
+            backdropFilter: 'blur(6px)', zIndex: 50,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '16px',
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: C.card, border: `1px solid ${C.border}`,
+              borderRadius: '16px', maxWidth: '720px', width: '100%',
+              maxHeight: '85vh', display: 'flex', flexDirection: 'column',
+              overflow: 'hidden',
+            }}
+          >
+            <div style={{
+              padding: '20px 24px', borderBottom: `1px solid ${C.border}`,
+              display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px',
+            }}>
+              <div>
+                <h3 style={{ fontSize: '16px', fontWeight: 700, color: C.text }}>Today&apos;s Products Sold</h3>
+                <p style={{ fontSize: '11px', color: C.textSub, marginTop: '4px' }}>
+                  {new Date().toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'Asia/Manila' })}
+                  {' · '}
+                  <span style={{ color: C.amber, fontWeight: 600 }}>
+                    ₱{(metrics?.today_sales ?? 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                  </span>
+                  {' · '}
+                  {todayTxs.length} tx
+                </p>
+              </div>
+              <button
+                onClick={() => setShowTodayModal(false)}
+                style={{
+                  background: 'transparent', border: `1px solid ${C.border}`,
+                  color: C.textSub, width: '32px', height: '32px',
+                  borderRadius: '8px', cursor: 'pointer', fontSize: '16px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}
+                aria-label="Close"
+              >×</button>
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto' }}>
+              {todayByProduct.length === 0 ? (
+                <div style={{ padding: '48px', textAlign: 'center', color: C.muted, fontSize: '13px' }}>
+                  No sales yet today
+                </div>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                  <thead style={{ position: 'sticky', top: 0, background: C.card, zIndex: 1 }}>
+                    <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                      {['#', '', 'Product', 'Qty', 'Tx', 'Total'].map((h, i) => (
+                        <th key={h + i} style={{
+                          padding: '11px 16px',
+                          textAlign: i >= 3 ? 'right' : 'left',
+                          fontSize: '9px', fontWeight: 700, letterSpacing: '2px',
+                          color: C.muted, textTransform: 'uppercase',
+                          width: i === 0 ? '40px' : i === 1 ? '52px' : undefined,
+                        }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {todayByProduct.map((p, i) => (
+                      <tr key={p.name} style={{ borderBottom: `1px solid ${C.border}` }}>
+                        <td style={{ padding: '12px 16px', color: C.muted, fontFamily: 'monospace', fontSize: '11px' }}>
+                          {(i + 1).toString().padStart(2, '0')}
+                        </td>
+                        <td style={{ padding: '8px 16px' }}>
+                          <div style={{
+                            width: '40px', height: '40px', borderRadius: '8px', overflow: 'hidden',
+                            background: C.border, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          }}>
+                            {p.image_url
+                              ? <img src={p.image_url} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              : <span style={{ fontSize: '14px', opacity: 0.35 }}>📦</span>
+                            }
+                          </div>
+                        </td>
+                        <td style={{ padding: '12px 16px', color: C.text, fontWeight: 500 }}>{p.name}</td>
+                        <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                          <span style={{
+                            display: 'inline-block', padding: '2px 8px', borderRadius: '5px',
+                            background: C.tealGlow, color: C.teal,
+                            fontFamily: 'monospace', fontSize: '12px', fontWeight: 500,
+                          }}>×{p.qty}</span>
+                        </td>
+                        <td style={{ padding: '12px 16px', textAlign: 'right', color: C.textSub, fontFamily: 'monospace', fontSize: '11px' }}>
+                          {p.tx_count}
+                        </td>
+                        <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: "'DM Mono', monospace", fontSize: '14px', color: C.amber, fontWeight: 500 }}>
+                          ₱{p.revenue.toFixed(2)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Mobile bottom nav */}
       <nav className="ds-mobile-nav">
