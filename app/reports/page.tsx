@@ -3,8 +3,8 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import {
-  ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend,
-  BarChart, Bar,
+  ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, Legend,
+  BarChart, Bar, ComposedChart, Area,
 } from 'recharts'
 import type { StockLevel } from '@/lib/inventory'
 
@@ -391,37 +391,135 @@ export default function ReportsPage() {
           ))}
         </div>
 
-        {/* Sales Line Chart */}
-        <div style={{ background: S.surface, border: `1px solid ${S.border}`, borderRadius: '16px', padding: '24px', marginBottom: '24px' }}>
-          <p style={{ fontSize: '11px', letterSpacing: '2px', color: S.muted, marginBottom: '20px', fontWeight: 700 }}>
-            {period === 'year' ? 'YEARLY SALES' : period === 'month' ? 'MONTHLY SALES' : period === 'week' ? 'WEEKLY SALES' : 'DAILY SALES'}
-          </p>
+        {/* Sales Composed Chart — bars (sales) + area+line (revenue) */}
+        <div style={{
+          background: `radial-gradient(at 100% 0%, ${S.amber}10 0%, transparent 50%), ${S.surface}`,
+          border: `1px solid ${S.border}`, borderRadius: '20px',
+          padding: '24px 24px 18px', marginBottom: '24px',
+          position: 'relative', overflow: 'hidden',
+        }}>
+          {/* Header */}
+          <div style={{
+            display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between',
+            marginBottom: '20px', flexWrap: 'wrap', gap: '12px',
+          }}>
+            <div>
+              <p style={{ fontSize: '11px', letterSpacing: '3px', color: S.muted, fontWeight: 700 }}>
+                {period === 'year' ? 'YEARLY SALES' : period === 'month' ? 'MONTHLY SALES' : period === 'week' ? 'WEEKLY SALES' : 'DAILY SALES'}
+              </p>
+              <p style={{ fontSize: '11px', letterSpacing: '1px', color: S.textSub, marginTop: '4px' }}>
+                Sales bars · revenue curve
+              </p>
+            </div>
+            {!loading && data?.daily_sales.length ? (() => {
+              const totalSales = data.daily_sales.reduce((s, d) => s + d.total, 0)
+              const totalRev = data.daily_sales.reduce((s, d) => s + (d.total - d.original_total), 0)
+              return (
+                <div style={{ display: 'flex', gap: '18px', alignItems: 'flex-end' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', lineHeight: 1.1 }}>
+                    <span style={{ fontFamily: "'Bebas Neue', cursive", fontSize: '22px', color: S.amber, letterSpacing: '1px' }}>{fmt(totalSales)}</span>
+                    <span style={{ fontSize: '9px', letterSpacing: '1.5px', color: S.muted, fontWeight: 700, marginTop: '2px' }}>SALES</span>
+                  </div>
+                  <div style={{ width: '1px', height: '32px', background: S.border }} />
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', lineHeight: 1.1 }}>
+                    <span style={{ fontFamily: "'Bebas Neue', cursive", fontSize: '22px', color: S.green, letterSpacing: '1px' }}>{fmt(totalRev)}</span>
+                    <span style={{ fontSize: '9px', letterSpacing: '1.5px', color: S.muted, fontWeight: 700, marginTop: '2px' }}>REVENUE</span>
+                  </div>
+                </div>
+              )
+            })() : null}
+          </div>
+
           {loading ? (
-            <div style={{ height: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: S.muted }}>Loading…</div>
+            <div style={{ height: '260px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: S.muted }}>Loading…</div>
           ) : !data?.daily_sales.length ? (
-            <div style={{ height: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: S.muted }}>No data for this period</div>
+            <div style={{ height: '260px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: S.muted }}>No data for this period</div>
           ) : (
-            <ResponsiveContainer width="100%" height={240}>
-              <LineChart
+            <ResponsiveContainer width="100%" height={300}>
+              <ComposedChart
                 data={data.daily_sales.map(d => ({ ...d, revenue: d.total - d.original_total }))}
-                margin={{ top: 4, right: 4, left: 0, bottom: 0 }}
+                margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+                barCategoryGap="22%"
               >
-                <CartesianGrid strokeDasharray="3 3" stroke={S.border} vertical={false} />
-                <XAxis dataKey="date" tickFormatter={(d) => fmtPeriod(String(d), period)} tick={{ fill: S.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis tickFormatter={v => `₱${v}`} tick={{ fill: S.muted, fontSize: 11 }} axisLine={false} tickLine={false} width={70} />
+                <defs>
+                  <linearGradient id="salesBarGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={S.amber} stopOpacity={0.85} />
+                    <stop offset="100%" stopColor={S.amber} stopOpacity={0.12} />
+                  </linearGradient>
+                  <linearGradient id="revenueAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={S.green} stopOpacity={0.35} />
+                    <stop offset="100%" stopColor={S.green} stopOpacity={0} />
+                  </linearGradient>
+                  <filter id="revenueGlow" x="-50%" y="-50%" width="200%" height="200%">
+                    <feGaussianBlur stdDeviation="3" result="blur" />
+                    <feMerge>
+                      <feMergeNode in="blur" />
+                      <feMergeNode in="SourceGraphic" />
+                    </feMerge>
+                  </filter>
+                </defs>
+                <CartesianGrid strokeDasharray="2 6" stroke={S.border} vertical={false} />
+                <XAxis
+                  dataKey="date"
+                  tickFormatter={(d) => fmtPeriod(String(d), period)}
+                  tick={{ fill: S.muted, fontSize: 11, fontFamily: 'monospace' }}
+                  axisLine={false}
+                  tickLine={false}
+                  padding={{ left: 12, right: 12 }}
+                />
+                <YAxis
+                  tickFormatter={v => `₱${v}`}
+                  tick={{ fill: S.muted, fontSize: 11 }}
+                  axisLine={false}
+                  tickLine={false}
+                  width={70}
+                />
                 <Tooltip
-                  contentStyle={{ background: S.surface, border: `1px solid ${S.border}`, borderRadius: '8px', fontFamily: 'Syne, sans-serif' }}
-                  labelStyle={{ color: S.textSub, fontSize: '12px' }}
+                  cursor={{ fill: `${S.amber}10` }}
+                  contentStyle={{
+                    background: S.bg,
+                    border: `1px solid ${S.amber}40`,
+                    borderRadius: '10px',
+                    fontFamily: 'Syne, sans-serif',
+                    boxShadow: `0 8px 32px rgba(0,0,0,0.4)`,
+                  }}
+                  labelStyle={{ color: S.textSub, fontSize: '11px', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '4px' }}
+                  itemStyle={{ fontSize: '13px', padding: '2px 0' }}
                   labelFormatter={(d) => fmtPeriod(String(d), period)}
-                  formatter={(v, name) => [fmt(Number(v)), name === 'total' ? 'Sales' : 'Revenue']}
+                  formatter={(v, name) => {
+                    const label = name === 'total' ? 'Sales' : 'Revenue'
+                    return [fmt(Number(v)), label]
+                  }}
                 />
                 <Legend
-                  wrapperStyle={{ fontSize: '11px', letterSpacing: '1px', paddingTop: '8px' }}
-                  formatter={(name) => name === 'total' ? 'SALES' : 'REVENUE'}
+                  iconType="circle"
+                  wrapperStyle={{ fontSize: '10px', letterSpacing: '2px', paddingTop: '10px' }}
+                  formatter={(name) => (
+                    <span style={{ color: name === 'total' ? S.amber : S.green, fontWeight: 700 }}>
+                      {name === 'total' ? 'SALES' : 'REVENUE'}
+                    </span>
+                  )}
                 />
-                <Line type="monotone" dataKey="total" stroke={S.amber} strokeWidth={2.5} dot={{ r: 4, fill: S.amber, strokeWidth: 0 }} activeDot={{ r: 6 }} />
-                <Line type="monotone" dataKey="revenue" stroke={S.green} strokeWidth={2.5} dot={{ r: 4, fill: S.green, strokeWidth: 0 }} activeDot={{ r: 6 }} />
-              </LineChart>
+                <Bar
+                  dataKey="total"
+                  fill="url(#salesBarGrad)"
+                  radius={[8, 8, 0, 0]}
+                  maxBarSize={48}
+                  isAnimationActive
+                  animationDuration={700}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="revenue"
+                  stroke={S.green}
+                  strokeWidth={2.5}
+                  fill="url(#revenueAreaGrad)"
+                  dot={{ r: 4, fill: S.green, strokeWidth: 2, stroke: S.bg }}
+                  activeDot={{ r: 6, fill: S.green, strokeWidth: 3, stroke: S.bg, filter: 'url(#revenueGlow)' }}
+                  isAnimationActive
+                  animationDuration={900}
+                />
+              </ComposedChart>
             </ResponsiveContainer>
           )}
         </div>
