@@ -27,23 +27,52 @@ type CartItem = {
 
 const CART_KEY = 'sale_cart_v1'
 
+// Module-scope in-memory mirror so the cart still works when the browser
+// refuses localStorage access (Android Chrome with site storage blocked,
+// in-app webviews like TikTok/Facebook, hard-private modes, etc.). The
+// mirror survives client-side navigation between routes but not a full
+// page reload — which matches what storage would give us if it worked.
+let memCart: CartItem[] | null = null
+let lsAlive: boolean | null = null
+
+function lsOk(): boolean {
+  if (lsAlive !== null) return lsAlive
+  if (typeof window === 'undefined') return false
+  try {
+    window.localStorage.setItem('__lstest', '1')
+    const got = window.localStorage.getItem('__lstest')
+    window.localStorage.removeItem('__lstest')
+    lsAlive = got === '1'
+  } catch {
+    lsAlive = false
+  }
+  return lsAlive
+}
+
 function loadCart(): CartItem[] {
   if (typeof window === 'undefined') return []
-  try {
-    const raw = window.localStorage.getItem(CART_KEY)
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
+  if (lsOk()) {
+    try {
+      const raw = window.localStorage.getItem(CART_KEY)
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (Array.isArray(parsed)) {
+          memCart = parsed
+          return parsed
+        }
+      }
+    } catch { /* fall through to memCart */ }
   }
+  return memCart ?? []
 }
 
 function saveCart(items: CartItem[]) {
   if (typeof window === 'undefined') return
+  memCart = items
+  if (!lsOk()) return
   try {
     window.localStorage.setItem(CART_KEY, JSON.stringify(items))
-  } catch { /* quota — non-fatal */ }
+  } catch { /* quota or revoked mid-session — memCart still holds it */ }
 }
 
 function SaleContent() {
@@ -53,6 +82,7 @@ function SaleContent() {
 
   const [cart, setCart] = useState<CartItem[]>([])
   const [scanLoading, setScanLoading] = useState(false)
+  const [storageBlocked, setStorageBlocked] = useState(false)
   const [debugLog, setDebugLog] = useState<string[]>([])
   const [showDebug, setShowDebug] = useState(false)
   const dlog = useCallback((msg: string) => {
@@ -83,16 +113,9 @@ function SaleContent() {
     dlog(`UA: ${ua}`)
     dlog(`PWA standalone: ${standalone}`)
     dlog(`mount: loadCart=${loaded.length} items [${loaded.map(i => i.name + 'x' + i.qty).join(', ')}]`)
-    let lsTest = 'ok'
-    try {
-      window.localStorage.setItem('__lstest', '1')
-      const got = window.localStorage.getItem('__lstest')
-      window.localStorage.removeItem('__lstest')
-      if (got !== '1') lsTest = 'roundtrip-fail'
-    } catch (e) {
-      lsTest = 'throw: ' + (e instanceof Error ? e.message : 'unknown')
-    }
-    dlog(`localStorage write-test: ${lsTest}`)
+    const ok = lsOk()
+    dlog(`localStorage write-test: ${ok ? 'ok' : 'blocked (in-memory fallback active)'}`)
+    setStorageBlocked(!ok)
     setCart(loaded)
   }, [dlog])
 
@@ -167,7 +190,10 @@ function SaleContent() {
   // Drain any barcode pending in localStorage (the scanner writes it
   // before navigating). Run on mount + on visibility/pageshow so that
   // returning to a backgrounded /sale tab in PWA still picks it up.
+  // When storage is blocked the scanner takes the URL-param path instead,
+  // so this becomes a no-op rather than an error.
   const drainPendingBarcode = useCallback(async () => {
+    if (!lsOk()) { dlog('drain: storage blocked, skipping'); return }
     try {
       const pending = window.localStorage.getItem('pending_sale_barcode')
       if (!pending) { dlog('drain: no pending'); return }
@@ -351,6 +377,12 @@ function SaleContent() {
           </button>
         )}
       </div>
+
+      {storageBlocked && (
+        <div className="w-full max-w-md bg-amber-900/30 border border-amber-700/40 rounded-xl px-4 py-2.5 text-xs text-amber-200">
+          <strong className="text-amber-300">Storage blocked.</strong> Cart works for this session only — it won&apos;t survive a reload or app close. Enable site cookies/storage for this site in Chrome settings to persist between sessions.
+        </div>
+      )}
 
       {showDebug && (
         <div className="w-full max-w-md bg-black border border-yellow-500/40 rounded-xl p-3 text-[10px] font-mono text-yellow-200 max-h-60 overflow-auto whitespace-pre-wrap break-all">
