@@ -322,6 +322,7 @@ export default function DashboardPage() {
         .tr-row:hover td { background: ${C.cardHover} !important; }
 
         .ds-mobile-topbar { display: none; }
+        .ds-mobile-nav { display: none; }
         .ds-main { padding: 32px 28px; }
         .ds-stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 22px; }
         .ds-charts-row { display: grid; grid-template-columns: 1fr 300px; gap: 14px; margin-bottom: 22px; }
