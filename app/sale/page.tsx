@@ -356,7 +356,10 @@ function SaleContent() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-950 text-white flex flex-col items-center p-4 gap-4 pb-32">
+    <main
+      className="min-h-screen bg-gray-950 text-white flex flex-col items-center p-4 gap-4"
+      style={{ paddingBottom: 'calc(9rem + env(safe-area-inset-bottom))' }}
+    >
       <div className="w-full max-w-md flex items-center gap-3 mt-2">
         <button onClick={() => router.push('/scan')} className="text-gray-400 text-sm hover:text-white">← Scanner</button>
         <h1 className="text-xl font-bold flex-1">Sale Cart</h1>
@@ -549,7 +552,10 @@ function SaleContent() {
 
       {/* Sticky checkout footer */}
       {cart.length > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 bg-gray-950/95 backdrop-blur-md border-t border-gray-800 p-4 z-30">
+        <div
+          className="fixed bottom-0 left-0 right-0 bg-gray-950/95 backdrop-blur-md border-t border-gray-800 px-4 pt-4 z-30"
+          style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
+        >
           <div className="max-w-md mx-auto flex items-center gap-3">
             <div className="flex flex-col">
               <span className="text-xs text-gray-500 uppercase tracking-wider">Total ({totalUnits} {totalUnits === 1 ? 'item' : 'items'})</span>
