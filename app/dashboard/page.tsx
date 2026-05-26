@@ -909,7 +909,7 @@ export default function DashboardPage() {
               >×</button>
             </div>
             <div style={{ flex: 1, overflowY: 'auto' }}>
-              {todayByProduct.length === 0 ? (
+              {todayTxs.length === 0 ? (
                 <div style={{ padding: '48px', textAlign: 'center', color: C.muted, fontSize: '13px' }}>
                   No sales yet today
                 </div>
@@ -917,47 +917,44 @@ export default function DashboardPage() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                   <thead style={{ position: 'sticky', top: 0, background: C.card, zIndex: 1 }}>
                     <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                      {['#', '', 'Product', 'Qty', 'Tx', 'Total'].map((h, i) => (
+                      {['Time', '', 'Product', 'Qty', 'Total'].map((h, i) => (
                         <th key={h + i} style={{
                           padding: '11px 16px',
                           textAlign: i >= 3 ? 'right' : 'left',
                           fontSize: '9px', fontWeight: 700, letterSpacing: '2px',
                           color: C.muted, textTransform: 'uppercase',
-                          width: i === 0 ? '40px' : i === 1 ? '52px' : undefined,
+                          width: i === 0 ? '78px' : i === 1 ? '52px' : undefined,
                         }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {todayByProduct.map((p, i) => (
-                      <tr key={p.name} style={{ borderBottom: `1px solid ${C.border}` }}>
-                        <td style={{ padding: '12px 16px', color: C.muted, fontFamily: 'monospace', fontSize: '11px' }}>
-                          {(i + 1).toString().padStart(2, '0')}
+                    {todayTxs.map(tx => (
+                      <tr key={tx.id} style={{ borderBottom: `1px solid ${C.border}` }}>
+                        <td style={{ padding: '12px 16px', color: C.textSub, fontFamily: 'monospace', fontSize: '11px', whiteSpace: 'nowrap' }}>
+                          {new Date(tx.created_at).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Manila' })}
                         </td>
                         <td style={{ padding: '8px 16px' }}>
                           <div style={{
                             width: '40px', height: '40px', borderRadius: '8px', overflow: 'hidden',
                             background: C.border, display: 'flex', alignItems: 'center', justifyContent: 'center',
                           }}>
-                            {p.image_url
-                              ? <img src={p.image_url} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            {tx.products?.image_url
+                              ? <img src={tx.products.image_url} alt={tx.products?.name ?? ''} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                               : <span style={{ fontSize: '14px', opacity: 0.35 }}>📦</span>
                             }
                           </div>
                         </td>
-                        <td style={{ padding: '12px 16px', color: C.text, fontWeight: 500 }}>{p.name}</td>
+                        <td style={{ padding: '12px 16px', color: C.text, fontWeight: 500 }}>{tx.products?.name ?? '—'}</td>
                         <td style={{ padding: '12px 16px', textAlign: 'right' }}>
                           <span style={{
                             display: 'inline-block', padding: '2px 8px', borderRadius: '5px',
                             background: C.tealGlow, color: C.teal,
                             fontFamily: 'monospace', fontSize: '12px', fontWeight: 500,
-                          }}>×{p.qty}</span>
-                        </td>
-                        <td style={{ padding: '12px 16px', textAlign: 'right', color: C.textSub, fontFamily: 'monospace', fontSize: '11px' }}>
-                          {p.tx_count}
+                          }}>×{tx.qty}</span>
                         </td>
                         <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: "'DM Mono', monospace", fontSize: '14px', color: C.amber, fontWeight: 500 }}>
-                          ₱{p.revenue.toFixed(2)}
+                          ₱{tx.total.toFixed(2)}
                         </td>
                       </tr>
                     ))}
