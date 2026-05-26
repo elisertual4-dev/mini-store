@@ -917,44 +917,44 @@ export default function DashboardPage() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                   <thead style={{ position: 'sticky', top: 0, background: C.card, zIndex: 1 }}>
                     <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                      {['Time', '', 'Product', 'Qty', 'Total'].map((h, i) => (
+                      {['', 'Product', 'Sales', 'Qty', 'Total'].map((h, i) => (
                         <th key={h + i} style={{
                           padding: '11px 16px',
-                          textAlign: i >= 3 ? 'right' : 'left',
+                          textAlign: i >= 2 ? 'right' : 'left',
                           fontSize: '9px', fontWeight: 700, letterSpacing: '2px',
                           color: C.muted, textTransform: 'uppercase',
-                          width: i === 0 ? '78px' : i === 1 ? '52px' : undefined,
+                          width: i === 0 ? '52px' : undefined,
                         }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {todayTxs.map(tx => (
-                      <tr key={tx.id} style={{ borderBottom: `1px solid ${C.border}` }}>
-                        <td style={{ padding: '12px 16px', color: C.textSub, fontFamily: 'monospace', fontSize: '11px', whiteSpace: 'nowrap' }}>
-                          {new Date(tx.created_at).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Manila' })}
-                        </td>
+                    {todayByProduct.map(p => (
+                      <tr key={p.name} style={{ borderBottom: `1px solid ${C.border}` }}>
                         <td style={{ padding: '8px 16px' }}>
                           <div style={{
                             width: '40px', height: '40px', borderRadius: '8px', overflow: 'hidden',
                             background: C.border, display: 'flex', alignItems: 'center', justifyContent: 'center',
                           }}>
-                            {tx.products?.image_url
-                              ? <img src={tx.products.image_url} alt={tx.products?.name ?? ''} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            {p.image_url
+                              ? <img src={p.image_url} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                               : <span style={{ fontSize: '14px', opacity: 0.35 }}>📦</span>
                             }
                           </div>
                         </td>
-                        <td style={{ padding: '12px 16px', color: C.text, fontWeight: 500 }}>{tx.products?.name ?? '—'}</td>
+                        <td style={{ padding: '12px 16px', color: C.text, fontWeight: 500 }}>{p.name}</td>
+                        <td style={{ padding: '12px 16px', textAlign: 'right', color: C.textSub, fontFamily: 'monospace', fontSize: '11px' }}>
+                          {p.tx_count}
+                        </td>
                         <td style={{ padding: '12px 16px', textAlign: 'right' }}>
                           <span style={{
                             display: 'inline-block', padding: '2px 8px', borderRadius: '5px',
                             background: C.tealGlow, color: C.teal,
                             fontFamily: 'monospace', fontSize: '12px', fontWeight: 500,
-                          }}>×{tx.qty}</span>
+                          }}>×{p.qty}</span>
                         </td>
                         <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: "'DM Mono', monospace", fontSize: '14px', color: C.amber, fontWeight: 500 }}>
-                          ₱{tx.total.toFixed(2)}
+                          ₱{p.revenue.toFixed(2)}
                         </td>
                       </tr>
                     ))}
