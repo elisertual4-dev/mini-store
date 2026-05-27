@@ -54,29 +54,61 @@ export default function InventoryPage() {
   const [printShowName, setPrintShowName] = useState(true)
   const [printShowBarcode, setPrintShowBarcode] = useState(true)
   const [printShowPrice, setPrintShowPrice] = useState(true)
-  const [printCopies, setPrintCopies] = useState<number | ''>(0)
+  type PrintItem = {
+    id: string
+    name: string
+    barcode: string
+    price: number
+    category: string | null
+    stock_qty: number
+    image_url: string | null
+    copies: number
+  }
+  const [printItems, setPrintItems] = useState<PrintItem[]>([])
   const [printSheetFrom, setPrintSheetFrom] = useState<number | ''>(1)
   const [printSheetTo, setPrintSheetTo] = useState<number | ''>(1)
   const [printJobCopies, setPrintJobCopies] = useState<number | ''>(1)
   const [printPortalRoot, setPrintPortalRoot] = useState<HTMLElement | null>(null)
   useEffect(() => { setPrintPortalRoot(document.body) }, [])
   const [printCopyFlash, setPrintCopyFlash] = useState(false)
+  const [showAddPrintItem, setShowAddPrintItem] = useState(false)
+  const [addPrintItemQuery, setAddPrintItemQuery] = useState('')
 
   // A4 printable area at 0.25in margins, with a 0.05in gap between labels.
-  // Recompute the default "fill the sheet" count when the chosen size changes
-  // so the user gets a sensible starting copies value.
-  useEffect(() => {
+  const fitsPerPageFor = useCallback((sizeIn: 1 | 2) => {
     const pageW = 8.27 - 0.5
     const pageH = 11.69 - 0.5
-    const pitch = printSize + 0.05
-    const cols = Math.floor((pageW + 0.05) / pitch)
-    const rows = Math.floor((pageH + 0.05) / pitch)
-    setPrintCopies(Math.max(1, cols * rows))
+    const pitch = sizeIn + 0.05
+    const cols = Math.max(1, Math.floor((pageW + 0.05) / pitch))
+    const rows = Math.max(1, Math.floor((pageH + 0.05) / pitch))
+    return cols * rows
+  }, [])
+
+  // When the user opens the print modal from a row, seed the print queue
+  // with that product. Their requested label count defaults to "fill one
+  // A4 page" so it matches the prior single-item behavior.
+  useEffect(() => {
+    if (!printProduct || !printBarcode) return
+    setPrintItems([{
+      id: printProduct.id,
+      name: printProduct.name,
+      barcode: printBarcode,
+      price: printProduct.price,
+      category: printProduct.category,
+      stock_qty: printProduct.stock_qty,
+      image_url: printProduct.image_url,
+      copies: fitsPerPageFor(printSize),
+    }])
     setPrintSheetFrom(1)
     setPrintSheetTo(1)
     setPrintJobCopies(1)
     setPrintCopyFlash(false)
-  }, [printSize, printProduct])
+    setShowAddPrintItem(false)
+    setAddPrintItemQuery('')
+    // intentionally not depending on printSize so re-opening doesn't blow
+    // away the queue when the user toggles size mid-session
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [printProduct, printBarcode])
 
   const [deleteProduct, setDeleteProduct] = useState<StockLevel | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
@@ -980,12 +1012,23 @@ export default function InventoryPage() {
         const cols = Math.max(1, Math.floor((pageW + labelGapIn) / pitch))
         const rows = Math.max(1, Math.floor((pageH + labelGapIn) / pitch))
         const fitsPerPage = cols * rows
-        const copies = typeof printCopies === 'number' && printCopies > 0 ? printCopies : 1
-        const totalSourcePages = Math.max(1, Math.ceil(copies / fitsPerPage))
+
+        // Flatten the print queue into a single list of label payloads so
+        // each label can carry its own product data (different name, barcode,
+        // and price per row).
+        type LabelData = { name: string; barcode: string; price: number }
+        const allLabels: LabelData[] = []
+        for (const item of printItems) {
+          for (let i = 0; i < item.copies; i++) {
+            allLabels.push({ name: item.name, barcode: item.barcode, price: item.price })
+          }
+        }
+        const totalLabels = Math.max(1, allLabels.length)
+        const totalSourcePages = Math.max(1, Math.ceil(allLabels.length / fitsPerPage))
 
         // Sheet range — which of the generated A4 pages actually print.
         // Clamp to valid range so the user can leave stale values that we
-        // self-correct as size/copies change.
+        // self-correct as size or queue changes.
         const fromRaw = typeof printSheetFrom === 'number' ? printSheetFrom : 1
         const toRaw = typeof printSheetTo === 'number' ? printSheetTo : totalSourcePages
         const sheetFrom = Math.max(1, Math.min(totalSourcePages, fromRaw))
@@ -994,14 +1037,14 @@ export default function InventoryPage() {
         const selectedSheetCount = sheetTo - sheetFrom + 1
         const totalPrintedSheets = selectedSheetCount * jobCopiesVal
 
-        // For each source page in the range, compute how many labels it
-        // carries (the last page may be partial). Then repeat by jobCopies.
-        const renderPlan: { labelCount: number }[] = []
+        // For each source page in the range, slice the matching label window
+        // (the last page may be partial). Then repeat by jobCopies.
+        const renderPlan: LabelData[][] = []
         for (let c = 0; c < jobCopiesVal; c++) {
           for (let pIdx = sheetFrom - 1; pIdx <= sheetTo - 1; pIdx++) {
             const start = pIdx * fitsPerPage
-            const end = Math.min(copies, start + fitsPerPage)
-            renderPlan.push({ labelCount: end - start })
+            const end = Math.min(allLabels.length, start + fitsPerPage)
+            renderPlan.push(allLabels.slice(start, end))
           }
         }
 
@@ -1022,26 +1065,35 @@ export default function InventoryPage() {
           pageBreakInside: 'avoid' as const,
         }
 
-        const labelContent = (
+        const renderLabel = (d: LabelData) => (
           <>
             {printShowName && (
               <p style={{ fontWeight: 700, fontSize: `${nameIn}in`, margin: 0, textAlign: 'center', lineHeight: 1.1 }}>
-                {printProduct.name}
+                {d.name}
               </p>
             )}
-            <QRCode value={printBarcode} size={qrPx} />
+            <QRCode value={d.barcode} size={qrPx} />
             {printShowBarcode && (
               <p style={{ margin: 0, fontSize: `${codeIn}in`, fontFamily: 'monospace', color: '#444' }}>
-                {printBarcode}
+                {d.barcode}
               </p>
             )}
             {printShowPrice && (
               <p style={{ margin: 0, fontSize: `${priceIn}in`, color: '#222' }}>
-                ₱{printProduct.price.toFixed(2)}
+                ₱{d.price.toFixed(2)}
               </p>
             )}
           </>
         )
+
+        // The on-screen preview shows the primary product (the one the user
+        // clicked Print QR on). Multi-item queues still print every item;
+        // preview just stays focused on the original choice.
+        const previewLabel: LabelData = {
+          name: printProduct.name,
+          barcode: printBarcode,
+          price: printProduct.price,
+        }
 
         return (
           <>
@@ -1070,8 +1122,8 @@ export default function InventoryPage() {
                       background: 'white',
                     }}
                   >
-                    {Array.from({ length: page.labelCount }).map((_, li) => (
-                      <div key={li} style={labelStyle}>{labelContent}</div>
+                    {page.map((d, li) => (
+                      <div key={li} style={labelStyle}>{renderLabel(d)}</div>
                     ))}
                   </div>
                 ))}
@@ -1084,7 +1136,7 @@ export default function InventoryPage() {
                 <div className="flex items-center justify-between">
                   <h2 className="text-base font-bold">Print Label</h2>
                   <button
-                    onClick={() => { setPrintProduct(null); setPrintBarcode('') }}
+                    onClick={() => { setPrintProduct(null); setPrintBarcode(''); setPrintItems([]) }}
                     className="text-gray-500 hover:text-white text-xl leading-none"
                     aria-label="Close"
                   >×</button>
@@ -1104,7 +1156,7 @@ export default function InventoryPage() {
                         className="border-2 border-dashed border-gray-700"
                         style={labelStyle}
                       >
-                        {labelContent}
+                        {renderLabel(previewLabel)}
                       </div>
                       <span className="text-[10px] text-gray-500 text-center">
                         A4 fits <strong className="text-gray-300">{fitsPerPage}</strong> per page ({cols}×{rows})
@@ -1134,32 +1186,148 @@ export default function InventoryPage() {
                       </div>
 
                       <div>
-                        <label className="block text-xs font-medium text-gray-400 mb-1.5">Labels</label>
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="number"
-                            min={1}
-                            max={2000}
-                            value={printCopies}
-                            onChange={e => {
-                              const v = e.target.value
-                              if (v === '') setPrintCopies('')
-                              else setPrintCopies(Math.max(1, Math.min(2000, Math.floor(Number(v)))))
-                            }}
-                            onBlur={() => { if (printCopies === '' || printCopies < 1) setPrintCopies(1) }}
-                            className="w-24 bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white font-mono focus:outline-none focus:ring-2 focus:ring-purple-500"
-                          />
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="text-xs font-medium text-gray-400">
+                            QR codes <span className="text-gray-600">({printItems.length})</span>
+                          </label>
                           <button
                             type="button"
-                            onClick={() => setPrintCopies(fitsPerPage)}
+                            onClick={() => { setShowAddPrintItem(v => !v); setAddPrintItemQuery('') }}
+                            className="text-xs text-purple-400 hover:text-purple-300 font-medium"
+                          >
+                            {showAddPrintItem ? '× Cancel' : '+ Add QR'}
+                          </button>
+                        </div>
+
+                        {showAddPrintItem && (
+                          <div className="mb-2 bg-gray-800/60 border border-gray-700 rounded-lg p-2 flex flex-col gap-2">
+                            <input
+                              type="text"
+                              value={addPrintItemQuery}
+                              onChange={e => setAddPrintItemQuery(e.target.value)}
+                              placeholder="Search product by name or barcode…"
+                              className="w-full bg-gray-900 border border-gray-700 rounded-md px-2 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                              autoFocus
+                            />
+                            <div className="max-h-40 overflow-y-auto flex flex-col gap-1">
+                              {(() => {
+                                const q = addPrintItemQuery.trim().toLowerCase()
+                                const taken = new Set(printItems.map(i => i.id))
+                                const candidates = products
+                                  .filter(p => !taken.has(p.id) && p.barcode)
+                                  .filter(p => {
+                                    if (!q) return true
+                                    return (
+                                      p.name.toLowerCase().includes(q) ||
+                                      (p.barcode ?? '').toLowerCase().includes(q)
+                                    )
+                                  })
+                                  .slice(0, 30)
+                                if (candidates.length === 0) {
+                                  return (
+                                    <div className="text-[11px] text-gray-500 px-2 py-1.5">
+                                      {q ? 'No matches' : 'No more products with barcodes available'}
+                                    </div>
+                                  )
+                                }
+                                return candidates.map(p => (
+                                  <button
+                                    key={p.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setPrintItems(items => [...items, {
+                                        id: p.id,
+                                        name: p.name,
+                                        barcode: p.barcode!,
+                                        price: p.price,
+                                        category: p.category,
+                                        stock_qty: p.stock_qty,
+                                        image_url: p.image_url,
+                                        copies: 1,
+                                      }])
+                                      setShowAddPrintItem(false)
+                                      setAddPrintItemQuery('')
+                                    }}
+                                    className="flex items-center gap-2 text-left px-2 py-1.5 rounded-md hover:bg-gray-700 transition-colors"
+                                  >
+                                    <div className="w-7 h-7 rounded bg-gray-900 overflow-hidden flex-shrink-0">
+                                      {p.image_url
+                                        ? <img src={p.image_url} alt="" className="w-full h-full object-cover" />
+                                        : <span className="text-xs opacity-40 flex items-center justify-center h-full">📦</span>
+                                      }
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="text-xs font-medium text-gray-100 truncate">{p.name}</div>
+                                      <div className="text-[10px] text-gray-500 font-mono truncate">{p.barcode}</div>
+                                    </div>
+                                  </button>
+                                ))
+                              })()}
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="flex flex-col gap-1.5 max-h-44 overflow-y-auto pr-1">
+                          {printItems.map((item, idx) => (
+                            <div key={item.id} className="flex items-center gap-2 bg-gray-800/40 border border-gray-700 rounded-lg px-2 py-1.5">
+                              <div className="w-7 h-7 rounded bg-gray-900 overflow-hidden flex-shrink-0">
+                                {item.image_url
+                                  ? <img src={item.image_url} alt="" className="w-full h-full object-cover" />
+                                  : <span className="text-xs opacity-40 flex items-center justify-center h-full">📦</span>
+                                }
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-xs font-medium text-gray-100 truncate">{item.name}</div>
+                                <div className="text-[10px] text-gray-500 font-mono truncate">{item.barcode}</div>
+                              </div>
+                              <input
+                                type="number"
+                                min={1}
+                                max={2000}
+                                value={item.copies}
+                                onChange={e => {
+                                  const v = e.target.value
+                                  const n = v === '' ? 1 : Math.max(1, Math.min(2000, Math.floor(Number(v))))
+                                  setPrintItems(items => items.map((it, i) => i === idx ? { ...it, copies: n } : it))
+                                }}
+                                className="w-14 bg-gray-900 border border-gray-700 rounded-md px-2 py-1 text-xs text-white font-mono text-center focus:outline-none focus:ring-1 focus:ring-purple-500"
+                                aria-label={`Copies of ${item.name}`}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  // Don't allow removing the primary product —
+                                  // closing the modal is how you abandon it.
+                                  if (item.id === printProduct.id && printItems.length === 1) return
+                                  setPrintItems(items => items.filter((_, i) => i !== idx))
+                                }}
+                                disabled={item.id === printProduct.id && printItems.length === 1}
+                                className="text-red-400 hover:text-red-300 text-base leading-none disabled:opacity-30 disabled:cursor-not-allowed px-1"
+                                aria-label="Remove"
+                                title={item.id === printProduct.id && printItems.length === 1 ? "Can't remove the only QR — close the modal instead" : 'Remove'}
+                              >×</button>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="flex items-center justify-between mt-1.5">
+                          <p className="text-[10px] text-gray-500">
+                            {totalLabels} {totalLabels === 1 ? 'label' : 'labels'} · {totalSourcePages} A4 {totalSourcePages === 1 ? 'sheet' : 'sheets'}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              // Spread fitsPerPage labels evenly across the items so
+                              // one click fills a sheet regardless of queue length.
+                              const per = Math.max(1, Math.floor(fitsPerPage / Math.max(1, printItems.length)))
+                              const remainder = fitsPerPage - per * printItems.length
+                              setPrintItems(items => items.map((it, i) => ({ ...it, copies: per + (i < remainder ? 1 : 0) })))
+                            }}
                             className="text-xs text-purple-400 hover:text-purple-300 underline"
                           >
                             Fill 1 page ({fitsPerPage})
                           </button>
                         </div>
-                        <p className="text-[10px] text-gray-500 mt-1">
-                          {copies} {copies === 1 ? 'label' : 'labels'} · {totalSourcePages} A4 {totalSourcePages === 1 ? 'sheet' : 'sheets'}
-                        </p>
                       </div>
 
                       <div>

@@ -2,7 +2,7 @@
 // Strategy: network-first for navigations (with cached fallback so installed
 // PWA still opens offline), pass-through for /api, ignore non-GET.
 
-const CACHE = 'hanz-mini-store-v8-print-flow'
+const CACHE = 'hanz-mini-store-v9-multi-qr'
 const PRECACHE_URLS = ['/', '/scan', '/inventory', '/dashboard', '/reports']
 
 self.addEventListener('install', (event) => {
