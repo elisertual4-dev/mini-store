@@ -49,6 +49,10 @@ export default function InventoryPage() {
   const [printProduct, setPrintProduct] = useState<StockLevel | null>(null)
   const [printBarcode, setPrintBarcode] = useState<string>('')
   const [savingBarcode, setSavingBarcode] = useState(false)
+  const [printSize, setPrintSize] = useState<1 | 2>(1)
+  const [printShowName, setPrintShowName] = useState(true)
+  const [printShowBarcode, setPrintShowBarcode] = useState(true)
+  const [printShowPrice, setPrintShowPrice] = useState(true)
 
   const [deleteProduct, setDeleteProduct] = useState<StockLevel | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
@@ -296,14 +300,16 @@ export default function InventoryPage() {
     setPrintProduct(p)
   }
 
-  async function handleDownloadAndPrint() {
+  function handlePrintLabel() {
+    if (!printProduct || !printBarcode) return
+    window.print()
+  }
+
+  async function handleDownloadLabel() {
     if (!printProduct || !printBarcode) return
     const area = document.getElementById('barcode-print-area')
     const svg = area?.querySelector('svg')
-    if (!svg) {
-      window.print()
-      return
-    }
+    if (!svg) return
 
     const svgClone = svg.cloneNode(true) as SVGSVGElement
     svgClone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
@@ -317,30 +323,58 @@ export default function InventoryPage() {
       qrImg.src = svgUrl
     })
 
-    const qrSize = 400
-    const padding = 32
-    const labelH = 40
-    const codeH = 24
-    const priceH = 32
+    // Render at 300 DPI so the PNG is print-ready at the chosen physical size.
+    const DPI = 300
+    const sideIn = printSize
+    const sidePx = sideIn * DPI
+    const padPx = Math.round(0.06 * DPI)
+    const namePx = Math.round(0.11 * sideIn * DPI)
+    const codePx = Math.round(0.07 * sideIn * DPI)
+    const pricePx = Math.round(0.09 * sideIn * DPI)
+    const gapPx = Math.round(0.025 * sideIn * DPI)
+
     const canvas = document.createElement('canvas')
-    canvas.width = qrSize + padding * 2
-    canvas.height = labelH + qrSize + codeH + priceH + padding * 2
+    canvas.width = sidePx
+    canvas.height = sidePx
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
     ctx.fillStyle = '#ffffff'
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    ctx.fillRect(0, 0, sidePx, sidePx)
     ctx.fillStyle = '#000000'
     ctx.textAlign = 'center'
-    ctx.font = 'bold 24px sans-serif'
-    ctx.fillText(printProduct.name, canvas.width / 2, padding + 24)
-    ctx.drawImage(qrImg, padding, padding + labelH, qrSize, qrSize)
-    ctx.font = '18px monospace'
-    ctx.fillStyle = '#666666'
-    ctx.fillText(printBarcode, canvas.width / 2, padding + labelH + qrSize + 22)
-    ctx.font = '20px sans-serif'
-    ctx.fillStyle = '#333333'
-    ctx.fillText('₱' + printProduct.price.toFixed(2), canvas.width / 2, padding + labelH + qrSize + codeH + 22)
+    ctx.textBaseline = 'middle'
+
+    const blocks: { kind: 'name' | 'qr' | 'code' | 'price'; height: number }[] = []
+    if (printShowName) blocks.push({ kind: 'name', height: namePx })
+    blocks.push({ kind: 'qr', height: 0 })
+    if (printShowBarcode) blocks.push({ kind: 'code', height: codePx })
+    if (printShowPrice) blocks.push({ kind: 'price', height: pricePx })
+
+    const fixedTotal = blocks.reduce((s, b) => s + b.height, 0) + gapPx * (blocks.length - 1)
+    const qrPx = Math.max(40, sidePx - padPx * 2 - fixedTotal)
+    blocks.find(b => b.kind === 'qr')!.height = qrPx
+
+    let y = padPx
+    for (const b of blocks) {
+      const cy = y + b.height / 2
+      if (b.kind === 'name') {
+        ctx.font = `bold ${namePx}px sans-serif`
+        ctx.fillStyle = '#000'
+        ctx.fillText(printProduct.name, sidePx / 2, cy)
+      } else if (b.kind === 'qr') {
+        ctx.drawImage(qrImg, (sidePx - qrPx) / 2, y, qrPx, qrPx)
+      } else if (b.kind === 'code') {
+        ctx.font = `${codePx}px monospace`
+        ctx.fillStyle = '#444'
+        ctx.fillText(printBarcode, sidePx / 2, cy)
+      } else {
+        ctx.font = `${pricePx}px sans-serif`
+        ctx.fillStyle = '#222'
+        ctx.fillText('₱' + printProduct.price.toFixed(2), sidePx / 2, cy)
+      }
+      y += b.height + gapPx
+    }
 
     const blob = await new Promise<Blob | null>(r => canvas.toBlob(r, 'image/png'))
     if (blob) {
@@ -348,14 +382,12 @@ export default function InventoryPage() {
       const a = document.createElement('a')
       const safeName = printProduct.name.trim().replace(/[^a-zA-Z0-9-_]+/g, '_')
       a.href = url
-      a.download = `qr-${safeName}-${printBarcode}.png`
+      a.download = `qr-${safeName}-${printBarcode}-${printSize}x${printSize}in.png`
       document.body.appendChild(a)
       a.click()
       a.remove()
       URL.revokeObjectURL(url)
     }
-
-    window.print()
   }
 
   async function openHistory(p: StockLevel) {
@@ -585,7 +617,7 @@ export default function InventoryPage() {
                       onClick={() => openPrint(p)}
                       className="px-2.5 py-1 text-xs bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 text-purple-400 rounded-lg font-medium transition-colors"
                     >
-                      Download QR
+                      Print QR
                     </button>
                     <button
                       onClick={() => setDeleteProduct(p)}
@@ -867,74 +899,203 @@ export default function InventoryPage() {
       )}
 
       {/* Print Barcode Modal */}
-      {printProduct && (
-        <>
-          <style>{`
-            @media print {
-              body * { visibility: hidden; }
-              #barcode-print-area, #barcode-print-area * { visibility: visible; }
-              #barcode-print-area {
-                position: fixed;
-                inset: 0;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                background: white;
+      {printProduct && (() => {
+        // QR pixel size: ~72% of the label's inner area minus padding, scaled
+        // by physical label size. 96 CSS-px == 1 CSS-inch in print, so this
+        // value also drives the on-screen preview at near-true size.
+        const qrPx = Math.round(96 * printSize * 0.7)
+        const padIn = 0.06
+        const nameIn = 0.11 * printSize
+        const codeIn = 0.07 * printSize
+        const priceIn = 0.09 * printSize
+        const gapIn = 0.025 * printSize
+        return (
+          <>
+            <style>{`
+              @media print {
+                body * { visibility: hidden; }
+                @page { size: auto; margin: 0; }
+                #barcode-print-area, #barcode-print-area * { visibility: visible; }
+                #barcode-print-area {
+                  position: fixed;
+                  inset: 0;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  background: white;
+                }
               }
-            }
-          `}</style>
-          <div
-            id="barcode-print-area"
-            style={{ position: 'absolute', left: '-9999px', top: 0 }}
-            aria-hidden="true"
-          >
-            {printBarcode && (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px', fontFamily: 'sans-serif' }}>
-                <p style={{ fontWeight: 700, fontSize: '14px', marginBottom: '8px', textAlign: 'center' }}>{printProduct.name}</p>
-                <QRCode value={printBarcode} size={120} />
-                <p style={{ marginTop: '6px', fontSize: '11px', fontFamily: 'monospace' }}>{printBarcode}</p>
-                <p style={{ marginTop: '2px', fontSize: '13px' }}>₱{printProduct.price.toFixed(2)}</p>
-              </div>
-            )}
-          </div>
-
-          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="bg-gray-900 border border-gray-800 rounded-2xl shadow-2xl w-full max-w-xs p-6 flex flex-col items-center gap-4">
-              <h2 className="text-base font-bold self-start">Download QR Code</h2>
-              {savingBarcode ? (
-                <div className="flex flex-col items-center gap-2 py-6">
-                  <div className="w-6 h-6 border-2 border-gray-700 border-t-purple-500 rounded-full animate-spin" />
-                  <p className="text-sm text-gray-400">Generating barcode…</p>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center gap-2 w-full">
-                  <div className="border border-gray-700 rounded-xl p-4 w-full flex flex-col items-center bg-white">
-                    <p className="text-black text-sm font-semibold text-center mb-3 leading-tight">{printProduct.name}</p>
-                    <QRCode value={printBarcode} size={100} />
-                    <p className="text-gray-500 text-xs font-mono mt-2">{printBarcode}</p>
-                    <p className="text-gray-600 text-xs mt-1">₱{printProduct.price.toFixed(2)}</p>
-                  </div>
+            `}</style>
+            <div
+              id="barcode-print-area"
+              style={{ position: 'absolute', left: '-9999px', top: 0 }}
+              aria-hidden="true"
+            >
+              {printBarcode && (
+                <div style={{
+                  width: `${printSize}in`,
+                  height: `${printSize}in`,
+                  padding: `${padIn}in`,
+                  boxSizing: 'border-box',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: `${gapIn}in`,
+                  fontFamily: 'sans-serif',
+                  background: 'white',
+                  color: 'black',
+                }}>
+                  {printShowName && (
+                    <p style={{ fontWeight: 700, fontSize: `${nameIn}in`, margin: 0, textAlign: 'center', lineHeight: 1.1 }}>
+                      {printProduct.name}
+                    </p>
+                  )}
+                  <QRCode value={printBarcode} size={qrPx} />
+                  {printShowBarcode && (
+                    <p style={{ margin: 0, fontSize: `${codeIn}in`, fontFamily: 'monospace', color: '#444' }}>
+                      {printBarcode}
+                    </p>
+                  )}
+                  {printShowPrice && (
+                    <p style={{ margin: 0, fontSize: `${priceIn}in`, color: '#222' }}>
+                      ₱{printProduct.price.toFixed(2)}
+                    </p>
+                  )}
                 </div>
               )}
-              <div className="flex gap-2 w-full">
-                <button
-                  onClick={() => { setPrintProduct(null); setPrintBarcode('') }}
-                  className="flex-1 px-4 py-2.5 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-xl text-sm font-medium transition-colors"
-                >
-                  Close
-                </button>
-                <button
-                  onClick={handleDownloadAndPrint}
-                  disabled={savingBarcode}
-                  className="flex-1 px-4 py-2.5 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-sm font-bold disabled:opacity-40 transition-colors"
-                >
-                  Download &amp; Print
-                </button>
+            </div>
+
+            <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+              <div className="bg-gray-900 border border-gray-800 rounded-2xl shadow-2xl w-full max-w-lg p-6 flex flex-col gap-4 max-h-[90vh] overflow-y-auto">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-base font-bold">Print Label</h2>
+                  <button
+                    onClick={() => { setPrintProduct(null); setPrintBarcode('') }}
+                    className="text-gray-500 hover:text-white text-xl leading-none"
+                    aria-label="Close"
+                  >×</button>
+                </div>
+
+                {savingBarcode ? (
+                  <div className="flex flex-col items-center gap-2 py-12">
+                    <div className="w-6 h-6 border-2 border-gray-700 border-t-purple-500 rounded-full animate-spin" />
+                    <p className="text-sm text-gray-400">Generating barcode…</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col sm:flex-row gap-5">
+                    {/* Live preview (true physical size at 96 CSS-px/in) */}
+                    <div className="flex flex-col items-center gap-2 flex-shrink-0">
+                      <span className="text-[10px] uppercase tracking-widest text-gray-500">Preview · {printSize}×{printSize} in</span>
+                      <div
+                        className="border-2 border-dashed border-gray-700 bg-white text-black flex flex-col items-center justify-center"
+                        style={{
+                          width: `${printSize}in`,
+                          height: `${printSize}in`,
+                          padding: `${padIn}in`,
+                          boxSizing: 'border-box',
+                          gap: `${gapIn}in`,
+                          fontFamily: 'sans-serif',
+                        }}
+                      >
+                        {printShowName && (
+                          <p style={{ fontWeight: 700, fontSize: `${nameIn}in`, margin: 0, textAlign: 'center', lineHeight: 1.1 }}>
+                            {printProduct.name}
+                          </p>
+                        )}
+                        <QRCode value={printBarcode} size={qrPx} />
+                        {printShowBarcode && (
+                          <p style={{ margin: 0, fontSize: `${codeIn}in`, fontFamily: 'monospace', color: '#444' }}>
+                            {printBarcode}
+                          </p>
+                        )}
+                        {printShowPrice && (
+                          <p style={{ margin: 0, fontSize: `${priceIn}in`, color: '#222' }}>
+                            ₱{printProduct.price.toFixed(2)}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Controls */}
+                    <div className="flex-1 flex flex-col gap-4 min-w-0">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-400 mb-1.5">Size</label>
+                        <div className="flex rounded-xl overflow-hidden border border-gray-700">
+                          <button
+                            type="button"
+                            onClick={() => setPrintSize(1)}
+                            className={`flex-1 py-2 text-sm font-semibold transition-colors ${printSize === 1 ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
+                          >
+                            1 × 1 in
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPrintSize(2)}
+                            className={`flex-1 py-2 text-sm font-semibold transition-colors border-l border-gray-700 ${printSize === 2 ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
+                          >
+                            2 × 2 in
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-400 mb-1.5">Include</label>
+                        <div className="flex flex-col gap-2">
+                          <label className="flex items-center gap-2 text-sm cursor-pointer select-none text-gray-300">
+                            <input
+                              type="checkbox"
+                              checked={printShowName}
+                              onChange={e => setPrintShowName(e.target.checked)}
+                              className="w-4 h-4 rounded accent-purple-500"
+                            />
+                            Product name
+                          </label>
+                          <label className="flex items-center gap-2 text-sm cursor-pointer select-none text-gray-300">
+                            <input
+                              type="checkbox"
+                              checked={printShowBarcode}
+                              onChange={e => setPrintShowBarcode(e.target.checked)}
+                              className="w-4 h-4 rounded accent-purple-500"
+                            />
+                            Barcode digits
+                          </label>
+                          <label className="flex items-center gap-2 text-sm cursor-pointer select-none text-gray-300">
+                            <input
+                              type="checkbox"
+                              checked={printShowPrice}
+                              onChange={e => setPrintShowPrice(e.target.checked)}
+                              className="w-4 h-4 rounded accent-purple-500"
+                            />
+                            Price
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex gap-2 pt-1">
+                  <button
+                    onClick={handleDownloadLabel}
+                    disabled={savingBarcode}
+                    className="flex-1 px-4 py-2.5 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-white rounded-xl text-sm font-semibold disabled:opacity-40 transition-colors"
+                  >
+                    Download PNG
+                  </button>
+                  <button
+                    onClick={handlePrintLabel}
+                    disabled={savingBarcode}
+                    className="flex-1 px-4 py-2.5 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-sm font-bold disabled:opacity-40 transition-colors"
+                  >
+                    Print
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        </>
-      )}
+          </>
+        )
+      })()}
 
       {/* Delete Confirmation Modal */}
       {deleteProduct && (
