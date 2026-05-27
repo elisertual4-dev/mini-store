@@ -60,6 +60,7 @@ export default function InventoryPage() {
   const [printJobCopies, setPrintJobCopies] = useState<number | ''>(1)
   const [printPortalRoot, setPrintPortalRoot] = useState<HTMLElement | null>(null)
   useEffect(() => { setPrintPortalRoot(document.body) }, [])
+  const [printCopyFlash, setPrintCopyFlash] = useState(false)
 
   // A4 printable area at 0.25in margins, with a 0.05in gap between labels.
   // Recompute the default "fill the sheet" count when the chosen size changes
@@ -74,6 +75,7 @@ export default function InventoryPage() {
     setPrintSheetFrom(1)
     setPrintSheetTo(1)
     setPrintJobCopies(1)
+    setPrintCopyFlash(false)
   }, [printSize, printProduct])
 
   const [deleteProduct, setDeleteProduct] = useState<StockLevel | null>(null)
@@ -325,6 +327,33 @@ export default function InventoryPage() {
   function handlePrintLabel() {
     if (!printProduct || !printBarcode) return
     window.print()
+  }
+
+  async function handleCopyLabel() {
+    if (!printProduct || !printBarcode) return
+    const lines = [
+      printProduct.name,
+      `Barcode: ${printBarcode}`,
+      `Price: ₱${printProduct.price.toFixed(2)}`,
+      `Category: ${printProduct.category ?? '—'}`,
+      `In stock: ${printProduct.stock_qty}`,
+    ]
+    const text = lines.join('\n')
+    try {
+      await navigator.clipboard.writeText(text)
+    } catch {
+      // Fallback for browsers without async Clipboard API (or denied permission)
+      const ta = document.createElement('textarea')
+      ta.value = text
+      ta.style.position = 'fixed'
+      ta.style.left = '-9999px'
+      document.body.appendChild(ta)
+      ta.select()
+      try { document.execCommand('copy') } catch { /* give up silently */ }
+      ta.remove()
+    }
+    setPrintCopyFlash(true)
+    window.setTimeout(() => setPrintCopyFlash(false), 1500)
   }
 
   async function handleDownloadLabel() {
@@ -1234,6 +1263,17 @@ export default function InventoryPage() {
                 )}
 
                 <div className="flex gap-2 pt-1">
+                  <button
+                    onClick={handleCopyLabel}
+                    disabled={savingBarcode}
+                    className={`flex-1 px-4 py-2.5 border rounded-xl text-sm font-semibold disabled:opacity-40 transition-colors ${
+                      printCopyFlash
+                        ? 'bg-emerald-600/20 border-emerald-500/40 text-emerald-300'
+                        : 'bg-gray-800 hover:bg-gray-700 border-gray-700 text-white'
+                    }`}
+                  >
+                    {printCopyFlash ? 'Copied!' : 'Copy details'}
+                  </button>
                   <button
                     onClick={handleDownloadLabel}
                     disabled={savingBarcode}
