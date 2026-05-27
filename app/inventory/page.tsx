@@ -53,6 +53,19 @@ export default function InventoryPage() {
   const [printShowName, setPrintShowName] = useState(true)
   const [printShowBarcode, setPrintShowBarcode] = useState(true)
   const [printShowPrice, setPrintShowPrice] = useState(true)
+  const [printCopies, setPrintCopies] = useState<number | ''>(0)
+
+  // A4 printable area at 0.25in margins, with a 0.05in gap between labels.
+  // Recompute the default "fill the sheet" count when the chosen size changes
+  // so the user gets a sensible starting copies value.
+  useEffect(() => {
+    const pageW = 8.27 - 0.5
+    const pageH = 11.69 - 0.5
+    const pitch = printSize + 0.05
+    const cols = Math.floor((pageW + 0.05) / pitch)
+    const rows = Math.floor((pageH + 0.05) / pitch)
+    setPrintCopies(Math.max(1, cols * rows))
+  }, [printSize, printProduct])
 
   const [deleteProduct, setDeleteProduct] = useState<StockLevel | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
@@ -900,70 +913,109 @@ export default function InventoryPage() {
 
       {/* Print Barcode Modal */}
       {printProduct && (() => {
-        // QR pixel size: ~72% of the label's inner area minus padding, scaled
-        // by physical label size. 96 CSS-px == 1 CSS-inch in print, so this
-        // value also drives the on-screen preview at near-true size.
-        const qrPx = Math.round(96 * printSize * 0.7)
         const padIn = 0.06
         const nameIn = 0.11 * printSize
         const codeIn = 0.07 * printSize
         const priceIn = 0.09 * printSize
         const gapIn = 0.025 * printSize
+
+        // Auto-size the QR so the label's contents fit within the chosen
+        // physical dimensions regardless of which text blocks are toggled.
+        const blocksCount = 1 + (printShowName ? 1 : 0) + (printShowBarcode ? 1 : 0) + (printShowPrice ? 1 : 0)
+        const gapsCount = blocksCount - 1
+        const textIn =
+          (printShowName ? nameIn : 0) +
+          (printShowBarcode ? codeIn : 0) +
+          (printShowPrice ? priceIn : 0)
+        const innerIn = printSize - padIn * 2
+        const heightCap = innerIn - textIn - gapsCount * gapIn
+        const qrIn = Math.max(0.3 * printSize, Math.min(heightCap, innerIn))
+        // 96 CSS-px == 1 CSS-inch, so this also drives the on-screen preview
+        // at near-true physical size.
+        const qrPx = Math.round(qrIn * 96)
+
+        // A4 printable area at 0.25in margins.
+        const pageW = 8.27 - 0.5
+        const pageH = 11.69 - 0.5
+        const labelGapIn = 0.05
+        const pitch = printSize + labelGapIn
+        const cols = Math.max(1, Math.floor((pageW + labelGapIn) / pitch))
+        const rows = Math.max(1, Math.floor((pageH + labelGapIn) / pitch))
+        const fitsPerPage = cols * rows
+        const copies = typeof printCopies === 'number' && printCopies > 0 ? printCopies : 1
+        const totalPages = Math.ceil(copies / fitsPerPage)
+
+        const labelStyle = {
+          width: `${printSize}in`,
+          height: `${printSize}in`,
+          padding: `${padIn}in`,
+          boxSizing: 'border-box' as const,
+          display: 'flex',
+          flexDirection: 'column' as const,
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: `${gapIn}in`,
+          fontFamily: 'sans-serif',
+          background: 'white',
+          color: 'black',
+          breakInside: 'avoid' as const,
+          pageBreakInside: 'avoid' as const,
+        }
+
+        const labelContent = (
+          <>
+            {printShowName && (
+              <p style={{ fontWeight: 700, fontSize: `${nameIn}in`, margin: 0, textAlign: 'center', lineHeight: 1.1 }}>
+                {printProduct.name}
+              </p>
+            )}
+            <QRCode value={printBarcode} size={qrPx} />
+            {printShowBarcode && (
+              <p style={{ margin: 0, fontSize: `${codeIn}in`, fontFamily: 'monospace', color: '#444' }}>
+                {printBarcode}
+              </p>
+            )}
+            {printShowPrice && (
+              <p style={{ margin: 0, fontSize: `${priceIn}in`, color: '#222' }}>
+                ₱{printProduct.price.toFixed(2)}
+              </p>
+            )}
+          </>
+        )
+
         return (
           <>
             <style>{`
+              .print-sheet { position: absolute; left: -9999px; top: 0; pointer-events: none; }
               @media print {
                 body * { visibility: hidden; }
-                @page { size: auto; margin: 0; }
-                #barcode-print-area, #barcode-print-area * { visibility: visible; }
-                #barcode-print-area {
-                  position: fixed;
-                  inset: 0;
-                  display: flex;
-                  align-items: center;
-                  justify-content: center;
-                  background: white;
+                @page { size: A4; margin: 0.25in; }
+                .print-sheet, .print-sheet * { visibility: visible; }
+                .print-sheet {
+                  position: absolute !important;
+                  left: 0 !important;
+                  top: 0 !important;
+                  width: 100% !important;
                 }
               }
             `}</style>
             <div
               id="barcode-print-area"
-              style={{ position: 'absolute', left: '-9999px', top: 0 }}
+              className="print-sheet"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: `repeat(auto-fill, ${printSize}in)`,
+                gap: `${labelGapIn}in`,
+                alignContent: 'start',
+                justifyContent: 'start',
+                width: `${pageW}in`,
+                background: 'white',
+              }}
               aria-hidden="true"
             >
-              {printBarcode && (
-                <div style={{
-                  width: `${printSize}in`,
-                  height: `${printSize}in`,
-                  padding: `${padIn}in`,
-                  boxSizing: 'border-box',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: `${gapIn}in`,
-                  fontFamily: 'sans-serif',
-                  background: 'white',
-                  color: 'black',
-                }}>
-                  {printShowName && (
-                    <p style={{ fontWeight: 700, fontSize: `${nameIn}in`, margin: 0, textAlign: 'center', lineHeight: 1.1 }}>
-                      {printProduct.name}
-                    </p>
-                  )}
-                  <QRCode value={printBarcode} size={qrPx} />
-                  {printShowBarcode && (
-                    <p style={{ margin: 0, fontSize: `${codeIn}in`, fontFamily: 'monospace', color: '#444' }}>
-                      {printBarcode}
-                    </p>
-                  )}
-                  {printShowPrice && (
-                    <p style={{ margin: 0, fontSize: `${priceIn}in`, color: '#222' }}>
-                      ₱{printProduct.price.toFixed(2)}
-                    </p>
-                  )}
-                </div>
-              )}
+              {printBarcode && Array.from({ length: copies }).map((_, i) => (
+                <div key={i} style={labelStyle}>{labelContent}</div>
+              ))}
             </div>
 
             <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -988,33 +1040,14 @@ export default function InventoryPage() {
                     <div className="flex flex-col items-center gap-2 flex-shrink-0">
                       <span className="text-[10px] uppercase tracking-widest text-gray-500">Preview · {printSize}×{printSize} in</span>
                       <div
-                        className="border-2 border-dashed border-gray-700 bg-white text-black flex flex-col items-center justify-center"
-                        style={{
-                          width: `${printSize}in`,
-                          height: `${printSize}in`,
-                          padding: `${padIn}in`,
-                          boxSizing: 'border-box',
-                          gap: `${gapIn}in`,
-                          fontFamily: 'sans-serif',
-                        }}
+                        className="border-2 border-dashed border-gray-700"
+                        style={labelStyle}
                       >
-                        {printShowName && (
-                          <p style={{ fontWeight: 700, fontSize: `${nameIn}in`, margin: 0, textAlign: 'center', lineHeight: 1.1 }}>
-                            {printProduct.name}
-                          </p>
-                        )}
-                        <QRCode value={printBarcode} size={qrPx} />
-                        {printShowBarcode && (
-                          <p style={{ margin: 0, fontSize: `${codeIn}in`, fontFamily: 'monospace', color: '#444' }}>
-                            {printBarcode}
-                          </p>
-                        )}
-                        {printShowPrice && (
-                          <p style={{ margin: 0, fontSize: `${priceIn}in`, color: '#222' }}>
-                            ₱{printProduct.price.toFixed(2)}
-                          </p>
-                        )}
+                        {labelContent}
                       </div>
+                      <span className="text-[10px] text-gray-500 text-center">
+                        A4 fits <strong className="text-gray-300">{fitsPerPage}</strong> per page ({cols}×{rows})
+                      </span>
                     </div>
 
                     {/* Controls */}
@@ -1037,6 +1070,35 @@ export default function InventoryPage() {
                             2 × 2 in
                           </button>
                         </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-400 mb-1.5">Copies</label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            min={1}
+                            max={500}
+                            value={printCopies}
+                            onChange={e => {
+                              const v = e.target.value
+                              if (v === '') setPrintCopies('')
+                              else setPrintCopies(Math.max(1, Math.min(500, Math.floor(Number(v)))))
+                            }}
+                            onBlur={() => { if (printCopies === '' || printCopies < 1) setPrintCopies(1) }}
+                            className="w-24 bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white font-mono focus:outline-none focus:ring-2 focus:ring-purple-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setPrintCopies(fitsPerPage)}
+                            className="text-xs text-purple-400 hover:text-purple-300 underline"
+                          >
+                            Fill 1 page ({fitsPerPage})
+                          </button>
+                        </div>
+                        <p className="text-[10px] text-gray-500 mt-1">
+                          {copies} {copies === 1 ? 'label' : 'labels'} · {totalPages} A4 {totalPages === 1 ? 'sheet' : 'sheets'}
+                        </p>
                       </div>
 
                       <div>
