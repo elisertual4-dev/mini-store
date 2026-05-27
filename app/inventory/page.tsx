@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import QRCode from 'react-qr-code'
 import type { StockLevel, InventoryLog } from '@/lib/inventory'
@@ -57,6 +58,8 @@ export default function InventoryPage() {
   const [printSheetFrom, setPrintSheetFrom] = useState<number | ''>(1)
   const [printSheetTo, setPrintSheetTo] = useState<number | ''>(1)
   const [printJobCopies, setPrintJobCopies] = useState<number | ''>(1)
+  const [printPortalRoot, setPrintPortalRoot] = useState<HTMLElement | null>(null)
+  useEffect(() => { setPrintPortalRoot(document.body) }, [])
 
   // A4 printable area at 0.25in margins, with a 0.05in gap between labels.
   // Recompute the default "fill the sheet" count when the chosen size changes
@@ -1014,45 +1017,38 @@ export default function InventoryPage() {
         return (
           <>
             <style>{`
-              .print-sheet { position: absolute; left: -9999px; top: 0; pointer-events: none; }
+              .print-sheet { display: none; }
               @media print {
-                body * { visibility: hidden; }
                 @page { size: A4; margin: 0.25in; }
-                .print-sheet, .print-sheet * { visibility: visible; }
-                .print-sheet {
-                  position: absolute !important;
-                  left: 0 !important;
-                  top: 0 !important;
-                  width: 100% !important;
-                }
-                .print-sheet-page:not(:last-child) { page-break-after: always; }
+                body > *:not(.print-sheet) { display: none !important; }
+                .print-sheet { display: block !important; }
+                .print-sheet-page { break-after: page; page-break-after: always; }
+                .print-sheet-page:last-child { break-after: auto; page-break-after: auto; }
               }
             `}</style>
-            <div
-              id="barcode-print-area"
-              className="print-sheet"
-              aria-hidden="true"
-            >
-              {printBarcode && renderPlan.map((page, pi) => (
-                <div
-                  key={pi}
-                  className="print-sheet-page"
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: `repeat(auto-fill, ${printSize}in)`,
-                    gap: `${labelGapIn}in`,
-                    alignContent: 'start',
-                    justifyContent: 'start',
-                    width: `${pageW}in`,
-                    background: 'white',
-                  }}
-                >
-                  {Array.from({ length: page.labelCount }).map((_, li) => (
-                    <div key={li} style={labelStyle}>{labelContent}</div>
-                  ))}
-                </div>
-              ))}
-            </div>
+            {printPortalRoot && createPortal(
+              <div id="barcode-print-area" className="print-sheet" aria-hidden="true">
+                {printBarcode && renderPlan.map((page, pi) => (
+                  <div
+                    key={pi}
+                    className="print-sheet-page"
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: `repeat(auto-fill, ${printSize}in)`,
+                      gap: `${labelGapIn}in`,
+                      alignContent: 'start',
+                      justifyContent: 'start',
+                      background: 'white',
+                    }}
+                  >
+                    {Array.from({ length: page.labelCount }).map((_, li) => (
+                      <div key={li} style={labelStyle}>{labelContent}</div>
+                    ))}
+                  </div>
+                ))}
+              </div>,
+              printPortalRoot
+            )}
 
             <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
               <div className="bg-gray-900 border border-gray-800 rounded-2xl shadow-2xl w-full max-w-lg p-6 flex flex-col gap-4 max-h-[90vh] overflow-y-auto">
