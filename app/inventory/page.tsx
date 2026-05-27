@@ -73,6 +73,8 @@ export default function InventoryPage() {
   const [printCopyFlash, setPrintCopyFlash] = useState(false)
   const [showAddPrintItem, setShowAddPrintItem] = useState(false)
   const [addPrintItemQuery, setAddPrintItemQuery] = useState('')
+  const [showAddPrintCategory, setShowAddPrintCategory] = useState(false)
+  const [printGapIn, setPrintGapIn] = useState<0.05 | 0.1 | 0.15>(0.1)
 
   // A4 printable area at 0.25in margins, with a 0.05in gap between labels.
   const fitsPerPageFor = useCallback((sizeIn: 1 | 2) => {
@@ -104,6 +106,7 @@ export default function InventoryPage() {
     setPrintJobCopies(1)
     setPrintCopyFlash(false)
     setShowAddPrintItem(false)
+    setShowAddPrintCategory(false)
     setAddPrintItemQuery('')
     // intentionally not depending on printSize so re-opening doesn't blow
     // away the queue when the user toggles size mid-session
@@ -1004,14 +1007,32 @@ export default function InventoryPage() {
         // at near-true physical size.
         const qrPx = Math.round(qrIn * 96)
 
-        // A4 printable area at 0.25in margins.
+        // A4 printable area at 0.25in margins, with the category header at
+        // top consuming ~0.4in of vertical space.
         const pageW = 8.27 - 0.5
         const pageH = 11.69 - 0.5
-        const labelGapIn = 0.05
+        const headerH = 0.4
+        const labelGapIn = printGapIn
         const pitch = printSize + labelGapIn
         const cols = Math.max(1, Math.floor((pageW + labelGapIn) / pitch))
-        const rows = Math.max(1, Math.floor((pageH + labelGapIn) / pitch))
+        const rows = Math.max(1, Math.floor(((pageH - headerH) + labelGapIn) / pitch))
         const fitsPerPage = cols * rows
+
+        // Derive a header label from the queue. If every item shares the
+        // same category, show that. Otherwise fall back to a generic title.
+        const categoryNames = Array.from(new Set(
+          printItems
+            .map(i => i.category?.trim() ?? '')
+            .filter(Boolean)
+            .map(c => c.toLowerCase())
+        ))
+        const headerText = (() => {
+          if (categoryNames.length === 1) {
+            const first = printItems.find(i => (i.category?.trim().toLowerCase() ?? '') === categoryNames[0])
+            return first?.category?.trim() ?? 'Products'
+          }
+          return 'Products'
+        })()
 
         // Flatten the print queue into a single list of label payloads so
         // each label can carry its own product data (different name, barcode,
@@ -1113,18 +1134,38 @@ export default function InventoryPage() {
                   <div
                     key={pi}
                     className="print-sheet-page"
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: `repeat(auto-fill, ${printSize}in)`,
-                      gap: `${labelGapIn}in`,
-                      alignContent: 'start',
-                      justifyContent: 'start',
-                      background: 'white',
-                    }}
+                    style={{ background: 'white' }}
                   >
-                    {page.map((d, li) => (
-                      <div key={li} style={labelStyle}>{renderLabel(d)}</div>
-                    ))}
+                    <div
+                      className="print-page-header"
+                      style={{
+                        fontFamily: 'sans-serif',
+                        fontWeight: 700,
+                        fontSize: '0.18in',
+                        color: '#000',
+                        textAlign: 'center',
+                        padding: '0 0 0.1in',
+                        borderBottom: '1px solid #000',
+                        marginBottom: '0.15in',
+                        letterSpacing: '0.02in',
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      {headerText}
+                    </div>
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: `repeat(auto-fill, ${printSize}in)`,
+                        gap: `${labelGapIn}in`,
+                        alignContent: 'start',
+                        justifyContent: 'start',
+                      }}
+                    >
+                      {page.map((d, li) => (
+                        <div key={li} style={labelStyle}>{renderLabel(d)}</div>
+                      ))}
+                    </div>
                   </div>
                 ))}
               </div>,
@@ -1161,6 +1202,9 @@ export default function InventoryPage() {
                       <span className="text-[10px] text-gray-500 text-center">
                         A4 fits <strong className="text-gray-300">{fitsPerPage}</strong> per page ({cols}×{rows})
                       </span>
+                      <span className="text-[9px] uppercase tracking-widest text-gray-600 text-center max-w-[2.5in] truncate">
+                        Header: <span className="text-gray-400 font-semibold">{headerText}</span>
+                      </span>
                     </div>
 
                     {/* Controls */}
@@ -1186,18 +1230,101 @@ export default function InventoryPage() {
                       </div>
 
                       <div>
+                        <label className="block text-xs font-medium text-gray-400 mb-1.5">Spacing</label>
+                        <div className="flex rounded-xl overflow-hidden border border-gray-700">
+                          {([0.05, 0.1, 0.15] as const).map((g, i) => (
+                            <button
+                              key={g}
+                              type="button"
+                              onClick={() => setPrintGapIn(g)}
+                              className={`flex-1 py-1.5 text-xs font-semibold transition-colors ${i > 0 ? 'border-l border-gray-700' : ''} ${printGapIn === g ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
+                            >
+                              {g === 0.05 ? 'Tight' : g === 0.1 ? 'Normal' : 'Loose'}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
                         <div className="flex items-center justify-between mb-1.5">
                           <label className="text-xs font-medium text-gray-400">
                             QR codes <span className="text-gray-600">({printItems.length})</span>
                           </label>
-                          <button
-                            type="button"
-                            onClick={() => { setShowAddPrintItem(v => !v); setAddPrintItemQuery('') }}
-                            className="text-xs text-purple-400 hover:text-purple-300 font-medium"
-                          >
-                            {showAddPrintItem ? '× Cancel' : '+ Add QR'}
-                          </button>
+                          <div className="flex items-center gap-3">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowAddPrintCategory(v => !v)
+                                setShowAddPrintItem(false)
+                                setAddPrintItemQuery('')
+                              }}
+                              className="text-xs text-purple-400 hover:text-purple-300 font-medium"
+                            >
+                              {showAddPrintCategory ? '× Cancel' : '+ Category'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowAddPrintItem(v => !v)
+                                setShowAddPrintCategory(false)
+                                setAddPrintItemQuery('')
+                              }}
+                              className="text-xs text-purple-400 hover:text-purple-300 font-medium"
+                            >
+                              {showAddPrintItem ? '× Cancel' : '+ Add QR'}
+                            </button>
+                          </div>
                         </div>
+
+                        {showAddPrintCategory && (
+                          <div className="mb-2 bg-gray-800/60 border border-gray-700 rounded-lg p-2 flex flex-col gap-1 max-h-44 overflow-y-auto">
+                            {categories.length === 0 ? (
+                              <div className="text-[11px] text-gray-500 px-2 py-1.5">
+                                No categories yet — assign categories to products first.
+                              </div>
+                            ) : (
+                              categories.map(cat => {
+                                const taken = new Set(printItems.map(i => i.id))
+                                const productsInCat = products.filter(p =>
+                                  p.barcode &&
+                                  (p.category?.trim().toLowerCase() ?? '') === cat.key
+                                )
+                                const availableInCat = productsInCat.filter(p => !taken.has(p.id))
+                                return (
+                                  <button
+                                    key={cat.key}
+                                    type="button"
+                                    disabled={availableInCat.length === 0}
+                                    onClick={() => {
+                                      setPrintItems(items => [
+                                        ...items,
+                                        ...availableInCat.map(p => ({
+                                          id: p.id,
+                                          name: p.name,
+                                          barcode: p.barcode!,
+                                          price: p.price,
+                                          category: p.category,
+                                          stock_qty: p.stock_qty,
+                                          image_url: p.image_url,
+                                          copies: 1,
+                                        })),
+                                      ])
+                                      setShowAddPrintCategory(false)
+                                    }}
+                                    className="flex items-center justify-between gap-2 text-left px-2 py-1.5 rounded-md hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                  >
+                                    <span className="text-xs font-medium text-gray-100 truncate">
+                                      {cat.display}
+                                    </span>
+                                    <span className="text-[10px] text-gray-500 font-mono shrink-0">
+                                      +{availableInCat.length} of {productsInCat.length}
+                                    </span>
+                                  </button>
+                                )
+                              })
+                            )}
+                          </div>
+                        )}
 
                         {showAddPrintItem && (
                           <div className="mb-2 bg-gray-800/60 border border-gray-700 rounded-lg p-2 flex flex-col gap-2">
