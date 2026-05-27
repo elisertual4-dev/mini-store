@@ -54,6 +54,9 @@ export default function InventoryPage() {
   const [printShowBarcode, setPrintShowBarcode] = useState(true)
   const [printShowPrice, setPrintShowPrice] = useState(true)
   const [printCopies, setPrintCopies] = useState<number | ''>(0)
+  const [printSheetFrom, setPrintSheetFrom] = useState<number | ''>(1)
+  const [printSheetTo, setPrintSheetTo] = useState<number | ''>(1)
+  const [printJobCopies, setPrintJobCopies] = useState<number | ''>(1)
 
   // A4 printable area at 0.25in margins, with a 0.05in gap between labels.
   // Recompute the default "fill the sheet" count when the chosen size changes
@@ -65,6 +68,9 @@ export default function InventoryPage() {
     const cols = Math.floor((pageW + 0.05) / pitch)
     const rows = Math.floor((pageH + 0.05) / pitch)
     setPrintCopies(Math.max(1, cols * rows))
+    setPrintSheetFrom(1)
+    setPrintSheetTo(1)
+    setPrintJobCopies(1)
   }, [printSize, printProduct])
 
   const [deleteProduct, setDeleteProduct] = useState<StockLevel | null>(null)
@@ -943,7 +949,29 @@ export default function InventoryPage() {
         const rows = Math.max(1, Math.floor((pageH + labelGapIn) / pitch))
         const fitsPerPage = cols * rows
         const copies = typeof printCopies === 'number' && printCopies > 0 ? printCopies : 1
-        const totalPages = Math.ceil(copies / fitsPerPage)
+        const totalSourcePages = Math.max(1, Math.ceil(copies / fitsPerPage))
+
+        // Sheet range — which of the generated A4 pages actually print.
+        // Clamp to valid range so the user can leave stale values that we
+        // self-correct as size/copies change.
+        const fromRaw = typeof printSheetFrom === 'number' ? printSheetFrom : 1
+        const toRaw = typeof printSheetTo === 'number' ? printSheetTo : totalSourcePages
+        const sheetFrom = Math.max(1, Math.min(totalSourcePages, fromRaw))
+        const sheetTo = Math.max(sheetFrom, Math.min(totalSourcePages, toRaw))
+        const jobCopiesVal = typeof printJobCopies === 'number' && printJobCopies > 0 ? printJobCopies : 1
+        const selectedSheetCount = sheetTo - sheetFrom + 1
+        const totalPrintedSheets = selectedSheetCount * jobCopiesVal
+
+        // For each source page in the range, compute how many labels it
+        // carries (the last page may be partial). Then repeat by jobCopies.
+        const renderPlan: { labelCount: number }[] = []
+        for (let c = 0; c < jobCopiesVal; c++) {
+          for (let pIdx = sheetFrom - 1; pIdx <= sheetTo - 1; pIdx++) {
+            const start = pIdx * fitsPerPage
+            const end = Math.min(copies, start + fitsPerPage)
+            renderPlan.push({ labelCount: end - start })
+          }
+        }
 
         const labelStyle = {
           width: `${printSize}in`,
@@ -997,24 +1025,32 @@ export default function InventoryPage() {
                   top: 0 !important;
                   width: 100% !important;
                 }
+                .print-sheet-page:not(:last-child) { page-break-after: always; }
               }
             `}</style>
             <div
               id="barcode-print-area"
               className="print-sheet"
-              style={{
-                display: 'grid',
-                gridTemplateColumns: `repeat(auto-fill, ${printSize}in)`,
-                gap: `${labelGapIn}in`,
-                alignContent: 'start',
-                justifyContent: 'start',
-                width: `${pageW}in`,
-                background: 'white',
-              }}
               aria-hidden="true"
             >
-              {printBarcode && Array.from({ length: copies }).map((_, i) => (
-                <div key={i} style={labelStyle}>{labelContent}</div>
+              {printBarcode && renderPlan.map((page, pi) => (
+                <div
+                  key={pi}
+                  className="print-sheet-page"
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: `repeat(auto-fill, ${printSize}in)`,
+                    gap: `${labelGapIn}in`,
+                    alignContent: 'start',
+                    justifyContent: 'start',
+                    width: `${pageW}in`,
+                    background: 'white',
+                  }}
+                >
+                  {Array.from({ length: page.labelCount }).map((_, li) => (
+                    <div key={li} style={labelStyle}>{labelContent}</div>
+                  ))}
+                </div>
               ))}
             </div>
 
@@ -1073,17 +1109,17 @@ export default function InventoryPage() {
                       </div>
 
                       <div>
-                        <label className="block text-xs font-medium text-gray-400 mb-1.5">Copies</label>
+                        <label className="block text-xs font-medium text-gray-400 mb-1.5">Labels</label>
                         <div className="flex items-center gap-2">
                           <input
                             type="number"
                             min={1}
-                            max={500}
+                            max={2000}
                             value={printCopies}
                             onChange={e => {
                               const v = e.target.value
                               if (v === '') setPrintCopies('')
-                              else setPrintCopies(Math.max(1, Math.min(500, Math.floor(Number(v)))))
+                              else setPrintCopies(Math.max(1, Math.min(2000, Math.floor(Number(v)))))
                             }}
                             onBlur={() => { if (printCopies === '' || printCopies < 1) setPrintCopies(1) }}
                             className="w-24 bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white font-mono focus:outline-none focus:ring-2 focus:ring-purple-500"
@@ -1097,7 +1133,71 @@ export default function InventoryPage() {
                           </button>
                         </div>
                         <p className="text-[10px] text-gray-500 mt-1">
-                          {copies} {copies === 1 ? 'label' : 'labels'} · {totalPages} A4 {totalPages === 1 ? 'sheet' : 'sheets'}
+                          {copies} {copies === 1 ? 'label' : 'labels'} · {totalSourcePages} A4 {totalSourcePages === 1 ? 'sheet' : 'sheets'}
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-400 mb-1.5">
+                          Sheets to print
+                          <span className="text-gray-500 font-normal ml-1">(of {totalSourcePages})</span>
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            min={1}
+                            max={totalSourcePages}
+                            value={printSheetFrom}
+                            onChange={e => {
+                              const v = e.target.value
+                              if (v === '') setPrintSheetFrom('')
+                              else setPrintSheetFrom(Math.max(1, Math.min(totalSourcePages, Math.floor(Number(v)))))
+                            }}
+                            onBlur={() => { if (printSheetFrom === '' || printSheetFrom < 1) setPrintSheetFrom(1) }}
+                            className="w-16 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-sm text-white font-mono text-center focus:outline-none focus:ring-2 focus:ring-purple-500"
+                          />
+                          <span className="text-xs text-gray-500">to</span>
+                          <input
+                            type="number"
+                            min={1}
+                            max={totalSourcePages}
+                            value={printSheetTo}
+                            onChange={e => {
+                              const v = e.target.value
+                              if (v === '') setPrintSheetTo('')
+                              else setPrintSheetTo(Math.max(1, Math.min(totalSourcePages, Math.floor(Number(v)))))
+                            }}
+                            onBlur={() => { if (printSheetTo === '' || printSheetTo < 1) setPrintSheetTo(1) }}
+                            className="w-16 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-sm text-white font-mono text-center focus:outline-none focus:ring-2 focus:ring-purple-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => { setPrintSheetFrom(1); setPrintSheetTo(totalSourcePages) }}
+                            className="text-xs text-purple-400 hover:text-purple-300 underline"
+                          >
+                            All
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-400 mb-1.5">Print copies</label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={50}
+                          value={printJobCopies}
+                          onChange={e => {
+                            const v = e.target.value
+                            if (v === '') setPrintJobCopies('')
+                            else setPrintJobCopies(Math.max(1, Math.min(50, Math.floor(Number(v)))))
+                          }}
+                          onBlur={() => { if (printJobCopies === '' || printJobCopies < 1) setPrintJobCopies(1) }}
+                          className="w-24 bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white font-mono focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        />
+                        <p className="text-[10px] text-gray-500 mt-1">
+                          Will print <strong className="text-gray-300">{totalPrintedSheets}</strong> {totalPrintedSheets === 1 ? 'sheet' : 'sheets'}
+                          {' '}({selectedSheetCount} × {jobCopiesVal})
                         </p>
                       </div>
 
