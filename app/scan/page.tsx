@@ -16,6 +16,19 @@ export default function ScanPage() {
   const [mode, setMode] = useState<Mode>('sale')
   const [scanState, setScanState] = useState<ScanState>('idle')
   const [error, setError] = useState<string | null>(null)
+  const [isOnline, setIsOnline] = useState(true)
+
+  useEffect(() => {
+    setIsOnline(navigator.onLine)
+    const onOnline = () => setIsOnline(true)
+    const onOffline = () => setIsOnline(false)
+    window.addEventListener('online', onOnline)
+    window.addEventListener('offline', onOffline)
+    return () => {
+      window.removeEventListener('online', onOnline)
+      window.removeEventListener('offline', onOffline)
+    }
+  }, [])
 
   useEffect(() => {
     return () => { controlsRef.current?.stop() }
@@ -73,7 +86,14 @@ export default function ScanPage() {
 
   return (
     <main className="min-h-screen bg-gray-950 text-white flex flex-col items-center p-4 gap-4">
-      <h1 className="text-xl font-bold mt-2">Barcode Scanner</h1>
+      <div className="flex items-center gap-2 mt-2">
+        <h1 className="text-xl font-bold">Barcode Scanner</h1>
+        {!isOnline && (
+          <span className="text-xs bg-orange-900/50 border border-orange-700/50 text-orange-300 px-2 py-0.5 rounded-full">
+            Offline
+          </span>
+        )}
+      </div>
 
       <div className="flex rounded-full overflow-hidden border border-gray-700 w-full max-w-xs">
         <Link

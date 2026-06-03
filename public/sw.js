@@ -1,9 +1,12 @@
 // Hanz Mini Store service worker
 // Strategy: network-first for navigations (with cached fallback so installed
-// PWA still opens offline), pass-through for /api, ignore non-GET.
+// PWA still opens offline), network-first+cache for product barcode lookups
+// (so scan works offline for previously seen products), pass-through for other
+// /api calls, stale-while-revalidate for static assets.
 
-const CACHE = 'hanz-mini-store-v10-cat-print'
-const PRECACHE_URLS = ['/', '/scan', '/inventory', '/dashboard', '/reports']
+const CACHE = 'hanz-mini-store-v11-offline'
+const PRODUCTS_CACHE = 'hanz-products-api-v11'
+const PRECACHE_URLS = ['/', '/scan', '/sale', '/inventory', '/dashboard', '/reports']
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -15,7 +18,9 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(
+        keys.filter((k) => k !== CACHE && k !== PRODUCTS_CACHE).map((k) => caches.delete(k))
+      ))
       .then(() => self.clients.claim())
       .then(() => self.clients.matchAll({ type: 'window' }))
       .then((clients) => {
@@ -24,14 +29,47 @@ self.addEventListener('activate', (event) => {
   )
 })
 
+// Strip cache-bust ?t= param so the same product URL always hits the same cache key
+function normalizeProductUrl(url) {
+  const u = new URL(url)
+  u.searchParams.delete('t')
+  return u.toString()
+}
+
 self.addEventListener('fetch', (event) => {
   const req = event.request
   if (req.method !== 'GET') return
 
   const url = new URL(req.url)
 
-  // Never cache cross-origin or API responses
+  // Never cache cross-origin
   if (url.origin !== self.location.origin) return
+
+  // Product barcode lookups: network-first, fall back to SW cache
+  if (url.pathname === '/api/products' && url.searchParams.has('barcode')) {
+    const cacheKey = normalizeProductUrl(req.url)
+    event.respondWith(
+      fetch(req)
+        .then((res) => {
+          if (res.ok) {
+            const copy = res.clone()
+            caches.open(PRODUCTS_CACHE).then((c) => c.put(cacheKey, copy)).catch(() => {})
+          }
+          return res
+        })
+        .catch(() =>
+          caches.open(PRODUCTS_CACHE)
+            .then((c) => c.match(cacheKey))
+            .then((cached) => cached || new Response(
+              JSON.stringify({ error: 'Offline — product not cached yet' }),
+              { status: 503, headers: { 'Content-Type': 'application/json' } }
+            ))
+        )
+    )
+    return
+  }
+
+  // All other API calls: pass through (no caching)
   if (url.pathname.startsWith('/api/')) return
 
   // Navigation requests: network-first, fall back to cached shell

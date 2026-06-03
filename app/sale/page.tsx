@@ -75,6 +75,52 @@ function saveCart(items: CartItem[]) {
   } catch { /* quota or revoked mid-session — memCart still holds it */ }
 }
 
+const OFFLINE_QUEUE_KEY = 'offline_tx_queue_v1'
+const PRODUCT_CACHE_KEY = 'product_barcode_cache_v1'
+
+type QueuedTx = {
+  id: string
+  product_id: string
+  qty: number
+  total: number
+  payment_method: 'cash' | 'credit'
+  customer_name: string | null
+  queued_at: string
+}
+
+function loadOfflineQueue(): QueuedTx[] {
+  if (!lsOk()) return []
+  try {
+    const raw = window.localStorage.getItem(OFFLINE_QUEUE_KEY)
+    return raw ? JSON.parse(raw) : []
+  } catch { return [] }
+}
+
+function saveOfflineQueue(q: QueuedTx[]) {
+  if (!lsOk()) return
+  try { window.localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(q)) } catch {}
+}
+
+function saveProductToCache(product: Product) {
+  if (!lsOk() || !product.barcode) return
+  try {
+    const raw = window.localStorage.getItem(PRODUCT_CACHE_KEY)
+    const cache: Record<string, Product> = raw ? JSON.parse(raw) : {}
+    cache[product.barcode] = product
+    window.localStorage.setItem(PRODUCT_CACHE_KEY, JSON.stringify(cache))
+  } catch {}
+}
+
+function getProductFromCache(barcode: string): Product | null {
+  if (!lsOk()) return null
+  try {
+    const raw = window.localStorage.getItem(PRODUCT_CACHE_KEY)
+    if (!raw) return null
+    const cache: Record<string, Product> = JSON.parse(raw)
+    return cache[barcode] ?? null
+  } catch { return null }
+}
+
 function SaleContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -86,7 +132,10 @@ function SaleContent() {
   const [scanError, setScanError] = useState<string | null>(null)
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   const [checkoutError, setCheckoutError] = useState<string | null>(null)
-  const [success, setSuccess] = useState<{ total: number; count: number; method: 'cash' | 'credit'; customer?: string } | null>(null)
+  const [success, setSuccess] = useState<{ total: number; count: number; method: 'cash' | 'credit'; customer?: string; offline?: boolean } | null>(null)
+  const [isOnline, setIsOnline] = useState(true)
+  const [pendingCount, setPendingCount] = useState(0)
+  const [syncing, setSyncing] = useState(false)
 
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'credit'>('cash')
   const [customerName, setCustomerName] = useState('')
@@ -103,7 +152,49 @@ function SaleContent() {
   useEffect(() => {
     setStorageBlocked(!lsOk())
     setCart(loadCart())
+    setIsOnline(navigator.onLine)
+    setPendingCount(loadOfflineQueue().length)
   }, [])
+
+  const syncOfflineQueue = useCallback(async () => {
+    const q = loadOfflineQueue()
+    if (q.length === 0) return
+    setSyncing(true)
+    const remaining: QueuedTx[] = []
+    for (const tx of q) {
+      try {
+        const res = await fetch('/api/transactions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            product_id: tx.product_id,
+            qty: tx.qty,
+            total: tx.total,
+            payment_method: tx.payment_method,
+            customer_name: tx.customer_name,
+          }),
+        })
+        if (!res.ok) remaining.push(tx)
+      } catch {
+        remaining.push(tx)
+      }
+    }
+    saveOfflineQueue(remaining)
+    setPendingCount(remaining.length)
+    setSyncing(false)
+  }, [])
+
+  // Listen for online/offline and auto-sync queue on reconnect
+  useEffect(() => {
+    const onOnline = () => { setIsOnline(true); syncOfflineQueue() }
+    const onOffline = () => setIsOnline(false)
+    window.addEventListener('online', onOnline)
+    window.addEventListener('offline', onOffline)
+    return () => {
+      window.removeEventListener('online', onOnline)
+      window.removeEventListener('offline', onOffline)
+    }
+  }, [syncOfflineQueue])
 
   // Sync state if another tab/PWA window mutates storage.
   useEffect(() => {
@@ -121,9 +212,17 @@ function SaleContent() {
     setScanLoading(true)
     setScanError(null)
     try {
-      const res = await fetch(`/api/products?barcode=${encodeURIComponent(code)}&t=${Date.now()}`, { cache: 'no-store' })
-      if (!res.ok) throw new Error('Product not found for barcode: ' + code)
-      const p: Product = await res.json()
+      let p: Product
+      try {
+        const res = await fetch(`/api/products?barcode=${encodeURIComponent(code)}&t=${Date.now()}`, { cache: 'no-store' })
+        if (!res.ok) throw new Error('Product not found for barcode: ' + code)
+        p = await res.json()
+        saveProductToCache(p)
+      } catch (fetchErr) {
+        const cached = getProductFromCache(code)
+        if (!cached) throw fetchErr
+        p = cached
+      }
 
       const current = loadCart()
       const idx = current.findIndex(it => it.id === p.id)
@@ -259,6 +358,35 @@ function SaleContent() {
     setCheckoutError(null)
     const trimmedCustomer = customerName.trim()
     try {
+      if (!navigator.onLine) {
+        // Queue all items for sync when connectivity returns
+        const queue = loadOfflineQueue()
+        const now = new Date().toISOString()
+        for (const item of cart) {
+          queue.push({
+            id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            product_id: item.id,
+            qty: item.qty,
+            total: item.price * item.qty,
+            payment_method: paymentMethod,
+            customer_name: paymentMethod === 'credit' ? trimmedCustomer : null,
+            queued_at: now,
+          })
+        }
+        saveOfflineQueue(queue)
+        setPendingCount(queue.length)
+        setSuccess({
+          total: totalAmount,
+          count: cart.length,
+          method: paymentMethod,
+          customer: paymentMethod === 'credit' ? trimmedCustomer : undefined,
+          offline: true,
+        })
+        writeCart([])
+        setCustomerName('')
+        return
+      }
+
       // Sequential POSTs so a mid-fail stops further charges
       for (const item of cart) {
         const res = await fetch('/api/transactions', {
@@ -304,8 +432,13 @@ function SaleContent() {
               </svg>
             </div>
             <h2 className="text-xl font-bold text-green-300">
-              {success.method === 'credit' ? 'Credit Recorded' : 'Sale Complete'}
+              {success.offline ? 'Saved Offline' : success.method === 'credit' ? 'Credit Recorded' : 'Sale Complete'}
             </h2>
+            {success.offline && (
+              <p className="text-xs text-orange-300 bg-orange-900/30 border border-orange-700/40 rounded-lg px-3 py-1.5">
+                Will sync to database when internet returns
+              </p>
+            )}
             {success.customer && <p className="text-sm text-gray-400">for <strong className="text-white">{success.customer}</strong></p>}
             <p className="text-3xl font-bold tracking-tight">₱{success.total.toFixed(2)}</p>
             <p className="text-xs text-gray-500">{success.count} item{success.count !== 1 ? 's' : ''}</p>
@@ -335,6 +468,25 @@ function SaleContent() {
       <div className="w-full max-w-md flex items-center gap-3 mt-2">
         <button onClick={() => router.push('/scan')} className="text-gray-400 text-sm hover:text-white">← Scanner</button>
         <h1 className="text-xl font-bold flex-1">Sale Cart</h1>
+        {syncing && (
+          <span className="text-xs text-blue-400 flex items-center gap-1">
+            <span className="w-3 h-3 border border-blue-700 border-t-blue-300 rounded-full animate-spin inline-block" />
+            Syncing
+          </span>
+        )}
+        {!isOnline && (
+          <span className="text-xs bg-orange-900/50 border border-orange-700/50 text-orange-300 px-2 py-0.5 rounded-full">
+            Offline
+          </span>
+        )}
+        {pendingCount > 0 && isOnline && !syncing && (
+          <button
+            onClick={syncOfflineQueue}
+            className="text-xs bg-blue-900/50 border border-blue-700/50 text-blue-300 px-2 py-0.5 rounded-full hover:bg-blue-900"
+          >
+            {pendingCount} pending ↑
+          </button>
+        )}
         {cart.length > 0 && (
           <button
             onClick={() => {
