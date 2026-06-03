@@ -2,6 +2,11 @@
 
 import { Suspense, useEffect, useRef, useState, useCallback } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
+import {
+  loadOfflineQueue, saveOfflineQueue,
+  saveProductToCache, getProductFromCache, cacheAllProducts,
+  type QueuedTx,
+} from '@/lib/offline-cache'
 
 type Product = {
   id: string
@@ -75,52 +80,6 @@ function saveCart(items: CartItem[]) {
   } catch { /* quota or revoked mid-session — memCart still holds it */ }
 }
 
-const OFFLINE_QUEUE_KEY = 'offline_tx_queue_v1'
-const PRODUCT_CACHE_KEY = 'product_barcode_cache_v1'
-
-type QueuedTx = {
-  id: string
-  product_id: string
-  qty: number
-  total: number
-  payment_method: 'cash' | 'credit'
-  customer_name: string | null
-  queued_at: string
-}
-
-function loadOfflineQueue(): QueuedTx[] {
-  if (!lsOk()) return []
-  try {
-    const raw = window.localStorage.getItem(OFFLINE_QUEUE_KEY)
-    return raw ? JSON.parse(raw) : []
-  } catch { return [] }
-}
-
-function saveOfflineQueue(q: QueuedTx[]) {
-  if (!lsOk()) return
-  try { window.localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(q)) } catch {}
-}
-
-function saveProductToCache(product: Product) {
-  if (!lsOk() || !product.barcode) return
-  try {
-    const raw = window.localStorage.getItem(PRODUCT_CACHE_KEY)
-    const cache: Record<string, Product> = raw ? JSON.parse(raw) : {}
-    cache[product.barcode] = product
-    window.localStorage.setItem(PRODUCT_CACHE_KEY, JSON.stringify(cache))
-  } catch {}
-}
-
-function getProductFromCache(barcode: string): Product | null {
-  if (!lsOk()) return null
-  try {
-    const raw = window.localStorage.getItem(PRODUCT_CACHE_KEY)
-    if (!raw) return null
-    const cache: Record<string, Product> = JSON.parse(raw)
-    return cache[barcode] ?? null
-  } catch { return null }
-}
-
 function SaleContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -136,6 +95,7 @@ function SaleContent() {
   const [isOnline, setIsOnline] = useState(true)
   const [pendingCount, setPendingCount] = useState(0)
   const [syncing, setSyncing] = useState(false)
+  const [cachedCount, setCachedCount] = useState(0)
 
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'credit'>('cash')
   const [customerName, setCustomerName] = useState('')
@@ -154,6 +114,10 @@ function SaleContent() {
     setCart(loadCart())
     setIsOnline(navigator.onLine)
     setPendingCount(loadOfflineQueue().length)
+    // Online: refresh full catalog into cache so offline mode has everything.
+    if (navigator.onLine) {
+      cacheAllProducts().then((n) => { if (n > 0) setCachedCount(n) })
+    }
   }, [])
 
   const syncOfflineQueue = useCallback(async () => {
@@ -186,7 +150,11 @@ function SaleContent() {
 
   // Listen for online/offline and auto-sync queue on reconnect
   useEffect(() => {
-    const onOnline = () => { setIsOnline(true); syncOfflineQueue() }
+    const onOnline = () => {
+      setIsOnline(true)
+      syncOfflineQueue()
+      cacheAllProducts().then((n) => { if (n > 0) setCachedCount(n) })
+    }
     const onOffline = () => setIsOnline(false)
     window.addEventListener('online', onOnline)
     window.addEventListener('offline', onOffline)
@@ -475,8 +443,8 @@ function SaleContent() {
           </span>
         )}
         {!isOnline && (
-          <span className="text-xs bg-orange-900/50 border border-orange-700/50 text-orange-300 px-2 py-0.5 rounded-full">
-            Offline
+          <span className="text-xs bg-orange-900/50 border border-orange-700/50 text-orange-300 px-2 py-0.5 rounded-full" title={cachedCount ? `${cachedCount} products cached for offline` : undefined}>
+            Offline{cachedCount ? ` · ${cachedCount} ready` : ''}
           </span>
         )}
         {pendingCount > 0 && isOnline && !syncing && (

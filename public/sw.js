@@ -4,8 +4,8 @@
 // (so scan works offline for previously seen products), pass-through for other
 // /api calls, stale-while-revalidate for static assets.
 
-const CACHE = 'hanz-mini-store-v11-offline'
-const PRODUCTS_CACHE = 'hanz-products-api-v11'
+const CACHE = 'hanz-mini-store-v12-offline'
+const PRODUCTS_CACHE = 'hanz-products-api-v12'
 const PRECACHE_URLS = ['/', '/scan', '/sale', '/inventory', '/dashboard', '/reports']
 
 self.addEventListener('install', (event) => {

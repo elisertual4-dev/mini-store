@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { BrowserMultiFormatReader } from '@zxing/browser'
+import { cacheAllProducts, cachedProductCount } from '@/lib/offline-cache'
 
 type Mode = 'sale' | 'restock'
 type ScanState = 'idle' | 'scanning' | 'found'
@@ -17,10 +18,16 @@ export default function ScanPage() {
   const [scanState, setScanState] = useState<ScanState>('idle')
   const [error, setError] = useState<string | null>(null)
   const [isOnline, setIsOnline] = useState(true)
+  const [cachedCount, setCachedCount] = useState(0)
 
   useEffect(() => {
     setIsOnline(navigator.onLine)
-    const onOnline = () => setIsOnline(true)
+    setCachedCount(cachedProductCount())
+    // Warm the full catalog into cache while online so the scan→sale lookup
+    // resolves any product offline, even if /sale was never opened.
+    const warm = () => cacheAllProducts().then((n) => { if (n > 0) setCachedCount(n) })
+    if (navigator.onLine) warm()
+    const onOnline = () => { setIsOnline(true); warm() }
     const onOffline = () => setIsOnline(false)
     window.addEventListener('online', onOnline)
     window.addEventListener('offline', onOffline)
@@ -89,8 +96,8 @@ export default function ScanPage() {
       <div className="flex items-center gap-2 mt-2">
         <h1 className="text-xl font-bold">Barcode Scanner</h1>
         {!isOnline && (
-          <span className="text-xs bg-orange-900/50 border border-orange-700/50 text-orange-300 px-2 py-0.5 rounded-full">
-            Offline
+          <span className="text-xs bg-orange-900/50 border border-orange-700/50 text-orange-300 px-2 py-0.5 rounded-full" title={cachedCount ? `${cachedCount} products cached for offline` : undefined}>
+            Offline{cachedCount ? ` · ${cachedCount} ready` : ''}
           </span>
         )}
       </div>
